@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rhythm Toy Game</title>
+<style>
+  :root{
+    --bg:#0b0b12; --panel:#15151f; --panel2:#1d1d2a; --border:#2c2c3d;
+    --text:#ececf5; --muted:#8b8ba3;
+    --accent:#ff4d8d; --accent2:#6b5bff; --ok:#3ddc97; --warn:#ffb03a; --danger:#ff5470;
+    --l0:#ff4d8d; --l1:#ffb03a; --l2:#3ddc97; --l3:#6b5bff;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; overscroll-behavior:none; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+    font-size:14px; line-height:1.5;
+    padding:12px 12px 40px;
+    touch-action:manipulation; user-select:none;
+  }
+  .wrap{ max-width:760px; margin:0 auto; }
+  h1{ font-size:19px; margin:0 0 2px; }
+  .sub{ color:var(--muted); font-size:12px; margin:0 0 12px; }
+  section{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:13px; margin-bottom:12px;
+  }
+  h2{ font-size:14px; margin:0 0 10px; letter-spacing:.3px; }
+  label{ display:block; font-size:11px; color:var(--muted); margin-bottom:3px; }
+  input[type=text], input[type=number], input[type=file], select{
+    width:100%; background:#0f0f17; color:var(--text);
+    border:1px solid var(--border); border-radius:9px;
+    padding:8px 9px; font-size:13px; font-family:inherit; outline:none;
+  }
+  input:focus, select:focus{ border-color:var(--accent2); }
+  button{
+    border:none; border-radius:10px; padding:10px 14px;
+    font-size:13px; font-weight:600; font-family:inherit;
+    color:#fff; cursor:pointer; transition:filter .12s, transform .05s;
+  }
+  button:active{ transform:scale(.97); }
+  button:disabled{ opacity:.32; cursor:not-allowed; }
+  .btn-row{ display:flex; gap:8px; }
+  .btn-row > button{ flex:1; }
+  .b-primary{ background:var(--accent2); }
+  .b-ok{ background:var(--ok); color:#08281c; }
+  .b-danger{ background:var(--danger); }
+  .b-warn{ background:var(--warn); color:#2a1a00; }
+  .b-ghost{ background:var(--panel2); border:1px solid var(--border); color:var(--text); }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; }
+  .grid4{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; }
+
+  .stat{ background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+  .stat .k{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .stat .v{ font-size:17px; font-weight:700; }
+
+  /* ---- play field ---- */
+  #stage{ position:relative; }
+  #field{ width:100%; display:block; background:#08080e;
+          border:1px solid var(--border); border-radius:12px; touch-action:none; }
+  #judgeText{
+    position:absolute; left:0; right:0; top:38%; text-align:center;
+    font-size:30px; font-weight:800; letter-spacing:1px; pointer-events:none;
+    opacity:0; transition:opacity .12s;
+  }
+  #comboText{
+    position:absolute; left:0; right:0; top:22%; text-align:center;
+    font-size:15px; font-weight:700; color:var(--muted); pointer-events:none;
+  }
+  .keys{ display:grid; gap:8px; margin-top:9px; }
+  .keys.k4{ grid-template-columns:1fr 1fr 1fr 1fr; }
+  .keys.k1{ grid-template-columns:1fr; }
+  .key{
+    height:74px; border-radius:12px; border:1px solid var(--border);
+    background:var(--panel2); font-size:13px; font-weight:700; color:var(--muted);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .key.hot{ filter:brightness(1.9); }
+  .key.l0{ border-color:var(--l0); color:var(--l0); }
+  .key.l1{ border-color:var(--l1); color:var(--l1); }
+  .key.l2{ border-color:var(--l2); color:var(--l2); }
+  .key.l3{ border-color:var(--l3); color:var(--l3); }
+
+  .energy{ background:#0f0f17; border:1px solid var(--border); border-radius:999px; height:16px; overflow:hidden; margin:10px 0 4px; position:relative; }
+  .energy > i{ display:block; height:100%; width:20%; background:linear-gradient(90deg,var(--accent2),var(--accent)); transition:width .12s linear; }
+  .energy.punish > i{ background:var(--danger); }
+
+  .dev-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .dev-head .title{ flex:1; min-width:0; }
+  .dev-head .title .n{ font-size:14px; font-weight:700; }
+  .dev-head .title .t{ font-size:11px; color:var(--muted); }
+  .badge{ font-size:10px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); white-space:nowrap; }
+  .badge.on{ color:#08281c; background:var(--ok); border-color:transparent; }
+  .badge.busy{ color:#2a1a00; background:var(--warn); border-color:transparent; }
+  .badge.err{ color:#fff; background:var(--danger); border-color:transparent; }
+
+  .switch{ display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
+  .switch input{ width:17px; height:17px; accent-color:var(--accent); }
+
+  .bar{ background:#0f0f17; border:1px solid var(--border); border-radius:999px; height:11px; overflow:hidden; margin:9px 0; }
+  .bar > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent2),var(--accent)); transition:width .12s linear; }
+
+  details{ margin-top:10px; border-top:1px solid var(--border); padding-top:9px; }
+  summary{ cursor:pointer; color:var(--muted); font-size:12px; user-select:none; }
+  details > .body{ margin-top:10px; }
+
+  .pat-pool{ display:flex; flex-wrap:wrap; gap:6px; }
+  .pat-pool label{
+    display:flex; align-items:center; gap:5px; margin:0;
+    background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+    padding:5px 8px; font-size:11px; color:var(--text);
+  }
+  .pat-pool input{ width:14px; height:14px; accent-color:var(--accent2); }
+
+  #log{
+    background:#08080e; border:1px solid var(--border); border-radius:10px;
+    padding:9px 10px; height:150px; overflow-y:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px; color:#9adfc0; white-space:pre-wrap; word-break:break-all;
+  }
+  .hint{ font-size:11.5px; color:var(--muted); line-height:1.6; margin:9px 0 0; }
+  .hint b{ color:var(--warn); font-weight:600; }
+  .fieldset-title{ font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:.6px; margin:14px 0 7px; }
+  .fieldset-title:first-child{ margin-top:0; }
+  .inline{ display:flex; gap:8px; align-items:flex-end; }
+  .inline > *{ flex:1; }
+  .inline > button{ flex:0 0 auto; }
+  code{ background:#0f0f17; border:1px solid var(--border); border-radius:5px; padding:1px 5px; font-size:11px; }
+</style>
+<!-- optional test transport: pinned, per the project notes (v4/v5 API differences) -->
+<script src="https://cdn.jsdelivr.net/npm/buttplug@5.0.0/dist/web/buttplug.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Rhythm Toy Game</h1>
+  <p class="sub">Hit the beat &mdash; the energy bar drives the toys. Direct Web Bluetooth: Lovense &middot; Satisfyer</p>
+
+  <!-- ============ PLAY ============ -->
+  <section>
+    <h2>Play</h2>
+
+    <div class="grid4">
+      <div class="stat"><div class="k">Energy</div><div class="v" id="sEnergy">20%</div></div>
+      <div class="stat"><div class="k">Combo</div><div class="v" id="sCombo">0</div></div>
+      <div class="stat"><div class="k">Accuracy</div><div class="v" id="sAcc" style="font-size:15px;">&mdash;</div></div>
+      <div class="stat"><div class="k">Toys</div><div class="v" id="sToys">0</div></div>
+    </div>
+
+    <div class="energy" id="energyBar"><i id="energyFill"></i></div>
+    <p class="hint" style="margin:0 0 10px;" id="energyHint">Perfect +3 &middot; Good +1.5 &middot; Miss &minus;15 after the punish pulse</p>
+
+    <div id="stage">
+      <canvas id="field" height="420"></canvas>
+      <div id="comboText"></div>
+      <div id="judgeText"></div>
+    </div>
+
+    <div class="keys k4" id="keys"></div>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button id="startGame" class="b-ok">Start Game</button>
+      <button id="stopGame" class="b-danger" disabled>Stop</button>
+    </div>
+    <button id="panic" class="b-warn" style="width:100%; margin-top:8px;">Panic &mdash; stop all toys now</button>
+  </section>
+
+  <!-- ============ GAME SETTINGS ============ -->
+  <section>
+    <h2>Game settings</h2>
+
+    <div class="grid2">
+      <div>
+        <label>Mode</label>
+        <select id="mode">
+          <option value="4k">4-key falling notes</option>
+          <option value="1k">Single key &mdash; tap the beat</option>
+        </select>
+      </div>
+      <div>
+        <label>Music source</label>
+        <select id="source">
+          <option value="click">Built-in metronome</option>
+          <option value="file">Load audio file</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="clickOpts" class="grid3" style="margin-top:9px;">
+      <div><label>BPM</label><input type="number" id="bpm" value="100" min="40" max="220" step="1"></div>
+      <div>
+        <label>Difficulty</label>
+        <select id="difficulty">
+          <option value="easy">Easy &mdash; 1 note / beat</option>
+          <option value="normal" selected>Normal &mdash; some 1/2 notes</option>
+          <option value="hard">Hard &mdash; dense 1/2 notes</option>
+        </select>
+      </div>
+      <div><label>Note approach (s)</label><input type="number" id="approach" value="1.6" min="0.6" max="4" step="0.1"></div>
+    </div>
+
+    <div id="fileOpts" style="margin-top:9px; display:none;">
+      <label>Audio file (stays on this device, never uploaded)</label>
+      <input type="file" id="audioFile" accept="audio/*">
+      <p class="hint" id="fileInfo">Beats are detected locally from the waveform. Long tracks take a few seconds to analyse.</p>
+      <div class="grid3" style="margin-top:9px;">
+        <div><label>Sensitivity</label><input type="number" id="sens" value="1.4" min="0.8" max="3" step="0.1"></div>
+        <div><label>Min gap (s)</label><input type="number" id="minGap" value="0.22" min="0.08" max="1" step="0.01"></div>
+        <div><label>Note approach (s)</label><input type="number" id="approach2" value="1.6" min="0.6" max="4" step="0.1"></div>
+      </div>
+    </div>
+
+    <div class="fieldset-title">Energy bar</div>
+    <div class="grid4">
+      <div><label>Start %</label><input type="number" id="eStart" value="20" min="0" max="100" step="1"></div>
+      <div><label>Perfect +%</label><input type="number" id="ePerfect" value="3" min="0" max="50" step="0.5"></div>
+      <div><label>Good +%</label><input type="number" id="eGood" value="1.5" min="0" max="50" step="0.5"></div>
+      <div><label>Miss &minus;%</label><input type="number" id="eMiss" value="15" min="0" max="100" step="1"></div>
+    </div>
+    <div class="grid3" style="margin-top:9px;">
+      <div><label>Floor %</label><input type="number" id="eMin" value="0" min="0" max="100" step="1"></div>
+      <div><label>Cap %</label><input type="number" id="eMax" value="100" min="1" max="100" step="1"></div>
+      <div><label>Idle decay %/s</label><input type="number" id="eDecay" value="0" min="0" max="20" step="0.5"></div>
+    </div>
+
+    <div class="fieldset-title">Punishment (on miss / wrong key)</div>
+    <div class="grid3">
+      <div><label>Punish %</label><input type="number" id="pPct" value="70" min="0" max="100" step="1"></div>
+      <div><label>Length (s)</label><input type="number" id="pSec" value="0.5" min="0.1" max="5" step="0.1"></div>
+      <div>
+        <label>Style</label>
+        <select id="pStyle">
+          <option value="steady" selected>Steady jolt</option>
+          <option value="stutter">Stutter</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint">The punish pulse plays at <b>Punish %</b> (ignoring the energy bar and patterns, still scaled per device),
+      then the energy bar drops by <b>Miss &minus;%</b>. Set Punish % to 0 for a &ldquo;dead stop&rdquo; punishment instead of a jolt.</p>
+
+    <div class="fieldset-title">Judging</div>
+    <div class="grid3">
+      <div><label>Perfect &plusmn;ms</label><input type="number" id="wPerfect" value="70" min="20" max="200" step="5"></div>
+      <div><label>Good &plusmn;ms</label><input type="number" id="wGood" value="140" min="40" max="400" step="5"></div>
+      <div><label>Audio offset (ms)</label><input type="number" id="offset" value="0" min="-300" max="300" step="5"></div>
+    </div>
+    <div class="switch" style="margin-top:9px;">
+      <input type="checkbox" id="strayMiss" checked><span>A press with no note nearby counts as a miss</span>
+    </div>
+    <div class="switch" style="margin-top:7px;">
+      <input type="checkbox" id="hitSound" checked><span>Play a click on every hit</span>
+    </div>
+  </section>
+
+  <!-- ============ SESSION ============ -->
+  <section>
+    <h2>Session</h2>
+    <div class="switch">
+      <input type="checkbox" id="bgMode" checked>
+      <span>Background mode &mdash; keep running while you use other apps</span>
+    </div>
+    <p class="hint" id="bgHint">
+      Publishes a silent media stream so Android treats the tab as foreground playback and stops
+      throttling it. A notification appears in the shade: <b>Pause = Stop</b>.
+      Keep the Chrome tab open (switching apps is fine, swiping Chrome away is not) and exclude
+      Chrome from battery optimisation. The game itself needs the screen on to be playable.
+    </p>
+  </section>
+
+  <!-- ============ INTIFACE ============ -->
+  <section>
+    <h2>Intiface (buttplug.js) &mdash; optional test transport <span class="badge" id="bpBadge">Not connected</span></h2>
+    <div class="inline">
+      <div><label>Server address</label><input type="text" id="bpUrl" value="ws://127.0.0.1:12345"></div>
+      <button class="b-primary" id="bpConnect">Connect</button>
+    </div>
+    <div class="btn-row" style="margin-top:9px;">
+      <button class="b-ghost" id="bpScan" disabled>Scan 8s</button>
+      <button class="b-ghost" id="bpDisconnect" disabled>Disconnect</button>
+    </div>
+    <p class="hint" id="bpStatus">
+      Direct Web Bluetooth is the default and needs nothing here. To test through Intiface instead:
+      start Intiface Central (Engine running, <b>Listen on all network interfaces</b> + <b>Bluetooth LE</b> on),
+      connect below, scan, then switch a device card's <b>Transport</b> to Intiface and pick the toy.
+    </p>
+  </section>
+
+  <!-- ============ DEVICES ============ -->
+  <div id="devices"></div>
+
+  <!-- ============ LOG ============ -->
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+    <div class="btn-row" style="margin-top:9px;">
+      <button class="b-ghost" id="clearLog">Clear</button>
+      <button class="b-ghost" id="wakeBtn">Keep screen awake</button>
+    </div>
+    <p class="hint">
+      <b>Connection order matters.</b> Press <i>Connect</i> first (opens the scanner), <b>then</b> power the
+      Lovense toy on. The reverse order scans fine but times out after ~30s.<br>
+      <b>Satisfyer:</b> if it was ever paired with the Satisfyer Connect app or Android Bluetooth
+      settings, <i>Forget</i> it in system settings, then hold the button 15s (reset pairing) and 4s
+      (discoverable) before connecting.
+    </p>
+  </section>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ================= helpers ================= */
+var $ = function(id){ return document.getElementById(id); };
+function clamp(v,a,b){ return Math.min(b, Math.max(a, v)); }
+function pad2(n){ return (n<10?'0':'')+n; }
+function rand(a,b){ return a + Math.random()*(b-a); }
+function randInt(a,b){ return Math.floor(rand(a,b+1)); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function num(el, fallback){
+  if (!el) return fallback;
+  var v = parseFloat(el.value);
+  return isNaN(v) ? fallback : v;
+}
+
+var logEl = $('log');
+function log(msg){
+  var d = new Date();
+  var line = '[' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '] ' + msg;
+  logEl.textContent += (logEl.textContent ? '\n' : '') + line;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ================= patterns ================= */
+/* calc(t, base) -> intensity percent. t = seconds since this pattern started. */
+var PATTERNS = [
+  { id:'steady',    name:'Steady',    calc:function(t,b){ return b; } },
+  { id:'pulse',     name:'Pulse',     calc:function(t,b){ return (t % 1.0) < 0.6 ? b : b*0.25; } },
+  { id:'wave',      name:'Wave',      calc:function(t,b){ return b*0.65 + b*0.35*Math.sin(2*Math.PI*t/2.0); } },
+  { id:'spike',     name:'Spike',     calc:function(t,b){ var c=t%1.5; return c<0.2 ? b*1.25 : b*0.5; } },
+  { id:'ramp',      name:'Ramp',      calc:function(t,b){ return b*(0.30 + 0.70*((t%3.0)/3.0)); } },
+  { id:'heartbeat', name:'Heartbeat', calc:function(t,b){ var c=t%1.6;
+                                        if(c<0.13) return b; if(c<0.29) return b*0.20;
+                                        if(c<0.42) return b; return b*0.15; } },
+  { id:'stutter',   name:'Stutter',   calc:function(t,b){ return (t % 0.5) < 0.25 ? b : b*0.40; } },
+  { id:'surge',     name:'Surge',     calc:function(t,b){ var c=t%4.0;
+                                        return c<3.0 ? b*(0.40+0.60*(c/3.0)) : b*0.25; } }
+];
+function patternById(id){
+  for (var i=0;i<PATTERNS.length;i++) if (PATTERNS[i].id===id) return PATTERNS[i];
+  return PATTERNS[0];
+}
+
+/* ================= BLE constants ================= */
+var LOVENSE_CODES = (function(){
+  var out = [];
+  for (var c=65; c<=90; c++) out.push(String.fromCharCode(c));
+  ['ED','EZ','EA','EB','PA','PB','BA','OC'].forEach(function(x){ out.push(x); });
+  return out;
+})();
+function lovenseServiceUuids(code){
+  var c  = (String(code).toUpperCase() + '0').slice(0,2);
+  var hx = c.charCodeAt(0).toString(16) + c.charCodeAt(1).toString(16);
+  return ['0023','0024','0025'].map(function(g){
+    return hx + '0001-' + g + '-4bd4-bbd5-a6920e4c5653';
+  });
+}
+var LOVENSE_OPTIONAL = (function(){
+  var s = [];
+  LOVENSE_CODES.forEach(function(code){ s = s.concat(lovenseServiceUuids(code)); });
+  s.push('0000fff0-0000-1000-8000-00805f9b34fb');
+  s.push('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+  return s;
+})();
+
+var SF_SVC_LIVE   = '51361500-c5e7-47c7-8a6e-47ebc99d80e8';
+var SF_CH_MODE    = '51361501-c5e7-47c7-8a6e-47ebc99d80e8';
+var SF_CH_VALUE   = '51361502-c5e7-47c7-8a6e-47ebc99d80e8';
+var SF_SVC_DEVICE = '51361600-c5e7-47c7-8a6e-47ebc99d80e8';
+var SF_OPTIONAL   = [SF_SVC_LIVE, SF_SVC_DEVICE, 'battery_service', 'device_information'];
+var SF_MODE_START = 0x01, SF_MODE_PAUSE = 0x03, SF_MODE_STOP = 0x07;
+
+/* ================= device definitions ================= */
+var DEFS = [
+  {
+    id:'gush', name:'Lovense Gush', type:'Vibration', brand:'lovense', motion:'vibrate',
+    code:'ED', scale:100,
+    cmdOptions:['Vibrate:{v};','Vibrate1:{v};','Vibrate2:{v};'],
+    cmdDefault:'Vibrate:{v};', valueMax:20
+  },
+  {
+    id:'solace', name:'Lovense Solace Pro', type:'Thrusting', brand:'lovense', motion:'thrust',
+    code:'BA', scale:50,
+    cmdOptions:['Thrusting:{v};','Thrusting:{v}:{a}:{b};','Thrust:{v};','Depth:{v};','Position:{v};'],
+    cmdDefault:'Thrusting:{v};', valueMax:20,
+    depthOptions:['(none)','DepthRange:{a}:{b};','Depth:{a}:{b};','FSetup:{a}:{b};','Position:{a}:{b};'],
+    depthDefault:'DepthRange:{a}:{b};', depthMax:20
+  },
+  {
+    id:'signet', name:'Satisfyer Signet Ring', type:'Vibration', brand:'satisfyer', motion:'vibrate',
+    scale:100, valueMax:100
+  }
+];
+
+/* ================= per-device state ================= */
+var devs = {};
+
+function makeState(def){
+  return {
+    def: def,
+    bt:null, server:null, tx:null, rx:null,
+    sfMode:null, sfValue:null, sfStarted:false,
+    connected:false, connecting:false,
+    mutex: Promise.resolve(),
+    lastSent: null, lastSentAt: 0,
+    transport: 'ble',
+    bpDevice: null, bpFeature: 0, bpKind: 'Vibrate', bpApi: 0,
+    enabled: true,
+    running: false,
+    patternStart: 0,
+    patternChangeAt: 0,
+    pattern: PATTERNS[0],
+    depthA: 0, depthB: 0,
+    ui:{}
+  };
+}
+
+/* ================= BLE plumbing ================= */
+function withBle(st, fn){
+  var run = st.mutex.then(fn, fn);
+  st.mutex = run.catch(function(){});
+  return run;
+}
+function withTimeout(promise, ms, label){
+  return new Promise(function(res, rej){
+    var to = setTimeout(function(){ rej(new Error(label + ' timed out after ' + ms + 'ms')); }, ms);
+    promise.then(function(v){ clearTimeout(to); res(v); },
+                 function(e){ clearTimeout(to); rej(e); });
+  });
+}
+function delay(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+function writeCh(ch, buf){
+  if (ch.properties && ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse) {
+    return ch.writeValueWithoutResponse(buf).catch(function(){ return ch.writeValue(buf); });
+  }
+  return ch.writeValue(buf);
+}
+function setStatus(st, text, cls){
+  st.ui.badge.textContent = text;
+  st.ui.badge.className = 'badge' + (cls ? ' ' + cls : '');
+}
+
+/* ---- Lovense ---- */
+function connectLovense(st){
+  return navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix:'LVS' }, { namePrefix:'LOVE' }],
+    optionalServices: LOVENSE_OPTIONAL
+  }).then(function(bt){
+    st.bt = bt;
+    bt.addEventListener('gattserverdisconnected', function(){ onDisconnected(st); });
+    log(st.def.name + ': selected "' + (bt.name||'(no name)') + '", connecting...');
+    return withTimeout(bt.gatt.connect(), 12000, 'gatt.connect');
+  }).then(function(server){
+    st.server = server;
+    return delay(600);
+  }).then(function(){
+    return st.server.getPrimaryServices();
+  }).then(function(services){
+    var chain = Promise.resolve();
+    services.forEach(function(svc){
+      chain = chain.then(function(){
+        if (st.tx && st.rx) return null;
+        return svc.getCharacteristics().then(function(chs){
+          chs.forEach(function(ch){
+            var p = ch.properties;
+            if (!st.tx && (p.write || p.writeWithoutResponse)) st.tx = ch;
+            if (!st.rx && (p.notify || p.indicate)) st.rx = ch;
+          });
+        }).catch(function(){});
+      });
+    });
+    return chain;
+  }).then(function(){
+    if (!st.tx) throw new Error('no writable characteristic found');
+    log(st.def.name + ': TX ' + st.tx.uuid + (st.rx ? ' / RX ' + st.rx.uuid : ' / no RX'));
+    if (!st.rx) return null;
+    return st.rx.startNotifications().then(function(){
+      st.rx.addEventListener('characteristicvaluechanged', function(e){
+        var s = new TextDecoder().decode(e.target.value);
+        log(st.def.name + ' <- ' + s);
+      });
+    }).catch(function(){ log(st.def.name + ': notifications unavailable (non-fatal)'); });
+  }).then(function(){
+    return delay(350);
+  }).then(function(){
+    st.connected = true;
+    return sendRaw(st, 'DeviceType;');
+  }).then(function(){
+    return sendRaw(st, 'Battery;');
+  });
+}
+
+/* ---- Satisfyer ---- */
+function connectSatisfyer(st){
+  var scanAll = st.ui.sfScanAll && st.ui.sfScanAll.checked;
+  var opts = scanAll
+    ? { acceptAllDevices:true, optionalServices: SF_OPTIONAL }
+    : { filters:[{ namePrefix:'SF' }], optionalServices: SF_OPTIONAL };
+  return navigator.bluetooth.requestDevice(opts).then(function(bt){
+    st.bt = bt;
+    bt.addEventListener('gattserverdisconnected', function(){ onDisconnected(st); });
+    log(st.def.name + ': selected "' + (bt.name||'(no name)') + '", connecting...');
+    return withTimeout(bt.gatt.connect(), 12000, 'gatt.connect');
+  }).then(function(server){
+    st.server = server;
+    return delay(600);
+  }).then(function(){
+    return st.server.getPrimaryService(SF_SVC_LIVE);
+  }).then(function(svc){
+    return Promise.all([ svc.getCharacteristic(SF_CH_MODE), svc.getCharacteristic(SF_CH_VALUE) ]);
+  }).then(function(chs){
+    st.sfMode = chs[0]; st.sfValue = chs[1];
+    st.sfStarted = false;
+    st.connected = true;
+    log(st.def.name + ': live-control service ready (mode ...1501 / value ...1502, big-endian)');
+    return delay(200);
+  });
+}
+
+function connect(st){
+  if (st.transport === 'bp'){ bindBp(st); return; }
+  if (!navigator.bluetooth) { log('Web Bluetooth is not available in this browser.'); return; }
+  if (st.connecting || st.connected) return;
+  st.connecting = true;
+  setStatus(st, 'Connecting', 'busy');
+  st.ui.connectBtn.disabled = true;
+  var t0 = Date.now();
+  var p = st.def.brand === 'lovense' ? connectLovense(st) : connectSatisfyer(st);
+  p.then(function(){
+    st.connecting = false;
+    setStatus(st, 'Connected', 'on');
+    st.ui.connectBtn.textContent = 'Reconnect';
+    st.ui.connectBtn.disabled = false;
+    st.ui.disconnectBtn.disabled = false;
+    log(st.def.name + ': connected in ' + ((Date.now()-t0)/1000).toFixed(1) + 's');
+    requestWakeLock();
+    if (G.running && st.enabled) startDevice(st);
+    refreshToyCount();
+  }).catch(function(err){
+    st.connecting = false; st.connected = false;
+    var secs = ((Date.now()-t0)/1000).toFixed(1);
+    setStatus(st, 'Failed', 'err');
+    st.ui.connectBtn.disabled = false;
+    log(st.def.name + ': FAILED after ' + secs + 's — ' + (err && err.message ? err.message : err));
+    if (parseFloat(secs) > 8) log('  ↳ ~timeout. Power-cycle the toy, press Connect first, then power it on.');
+    try { if (st.bt && st.bt.gatt && st.bt.gatt.connected) st.bt.gatt.disconnect(); } catch(e){}
+    refreshToyCount();
+  });
+}
+
+function onDisconnected(st){
+  st.connected = false; st.tx = null; st.rx = null; st.bpDevice = null;
+  st.sfMode = null; st.sfValue = null; st.sfStarted = false; st.lastSent = null;
+  st.running = false;
+  setStatus(st, 'Disconnected');
+  st.ui.disconnectBtn.disabled = true;
+  st.ui.connectBtn.disabled = false;
+  log(st.def.name + ': disconnected');
+  refreshToyCount();
+}
+
+function disconnect(st){
+  stopDevice(st);
+  if (st.transport === 'bp'){
+    st.bpDevice = null;
+    onDisconnected(st);
+    return;
+  }
+  setTimeout(function(){
+    try { if (st.bt && st.bt.gatt && st.bt.gatt.connected) st.bt.gatt.disconnect(); } catch(e){}
+  }, 250);
+}
+
+/* ---- raw send ---- */
+function sendRaw(st, text){
+  if (!st.connected || st.transport !== 'ble') return Promise.resolve();
+  if (st.def.brand !== 'lovense' || !st.tx) return Promise.resolve();
+  var buf = new TextEncoder().encode(text);
+  return withBle(st, function(){ return writeCh(st.tx, buf); })
+    .then(function(){ log(st.def.name + ' -> ' + text); })
+    .catch(function(e){ log(st.def.name + ' -> ' + text + ' FAILED: ' + (e.message||e)); });
+}
+
+/* ---- intensity ---- */
+function sendIntensity(st, pct){
+  if (!st.connected) return;
+  if (st.transport === 'bp'){ bpSend(st, pct); return; }
+  var def = st.def;
+  if (def.brand === 'lovense'){
+    var vmax = num(st.ui.valueMax, def.valueMax);
+    var lvl = clamp(Math.round(pct/100*vmax), 0, vmax);
+    if (st.lastSent === lvl) return;
+    st.lastSent = lvl;
+    var tmpl = currentCmdTemplate(st);
+    var s = tmpl.replace('{v}', lvl).replace('{a}', st.depthA).replace('{b}', st.depthB);
+    var buf = new TextEncoder().encode(s);
+    withBle(st, function(){ return writeCh(st.tx, buf); }).catch(function(e){
+      log(def.name + ': write failed — ' + (e.message||e));
+    });
+  } else {
+    var v = clamp(Math.round(pct), 0, 100);
+    var nowMs = Date.now();
+    if (st.lastSent === v && (nowMs - st.lastSentAt) < 1000) return;
+    st.lastSent = v; st.lastSentAt = nowMs;
+    if (v <= 0){
+      st.sfStarted = false;
+      withBle(st, function(){ return writeCh(st.sfMode, Uint8Array.of(SF_MODE_STOP)); }).catch(function(){});
+      return;
+    }
+    if (!st.sfStarted){
+      st.sfStarted = true;
+      withBle(st, function(){ return writeCh(st.sfMode, Uint8Array.of(SF_MODE_START)); }).catch(function(){});
+    }
+    withBle(st, function(){ return writeCh(st.sfValue, Uint8Array.of(0,0,0,v)); }).catch(function(e){
+      log(def.name + ': write failed — ' + (e.message||e));
+    });
+  }
+}
+
+function hardStop(st){
+  if (!st.connected) return;
+  if (st.transport === 'bp'){ bpStop(st); return; }
+  st.lastSent = null;
+  if (st.def.brand === 'lovense'){
+    var tmpl = currentCmdTemplate(st);
+    var s = tmpl.replace('{v}', 0).replace('{a}', st.depthA).replace('{b}', st.depthB);
+    sendRaw(st, s);
+  } else {
+    st.sfStarted = false;
+    withBle(st, function(){ return writeCh(st.sfValue, Uint8Array.of(0,0,0,0)); }).catch(function(){});
+    withBle(st, function(){ return writeCh(st.sfMode, Uint8Array.of(SF_MODE_STOP)); }).catch(function(){});
+  }
+}
+
+/* ================= buttplug / Intiface transport ================= */
+var BPX = { client:null, connector:null, connected:false, devices:[] };
+function bpLib(){ return window.Buttplug || window.buttplug; }
+
+function bpSetBadge(text, cls){
+  var el = $('bpBadge');
+  el.textContent = text;
+  el.className = 'badge' + (cls ? ' ' + cls : '');
+}
+
+function bpConnect(){
+  var BP = bpLib();
+  if (!BP){ log('buttplug.js did not load (offline or CDN blocked) — Intiface transport unavailable.'); return; }
+  if (BPX.connected) return;
+  var url = $('bpUrl').value.trim() || 'ws://127.0.0.1:12345';
+  bpSetBadge('Connecting', 'busy');
+  try {
+    BPX.connector = new BP.ButtplugBrowserWebsocketClientConnector(url);
+    BPX.client = new BP.ButtplugClient('Rhythm Toy Game');
+    BPX.client.addListener('deviceadded', function(d){
+      BPX.devices.push(d);
+      log('Intiface: device added — ' + d.name);
+      refreshBpSelects();
+    });
+    BPX.client.addListener('deviceremoved', function(d){
+      BPX.devices = BPX.devices.filter(function(x){ return x !== d; });
+      Object.keys(devs).forEach(function(k){
+        var st = devs[k];
+        if (st.bpDevice === d){ st.bpDevice = null; onDisconnected(st); }
+      });
+      log('Intiface: device removed — ' + d.name);
+      refreshBpSelects();
+    });
+    BPX.client.connect(BPX.connector).then(function(){
+      BPX.connected = true;
+      bpSetBadge('Connected', 'on');
+      $('bpScan').disabled = false;
+      $('bpDisconnect').disabled = false;
+      $('bpConnect').disabled = true;
+      log('Intiface: connected to ' + url);
+      // devices already known to the server
+      var known = BPX.client.devices || [];
+      known.forEach(function(d){ if (BPX.devices.indexOf(d) < 0) BPX.devices.push(d); });
+      refreshBpSelects();
+    }).catch(function(e){
+      bpSetBadge('Failed', 'err');
+      log('Intiface: connect failed — ' + (e.message||e) +
+          '  ↳ is the Engine running and the address the same one Intiface shows?');
+    });
+  } catch(e){
+    bpSetBadge('Failed', 'err');
+    log('Intiface: ' + (e.message||e));
+  }
+}
+
+function bpScan(){
+  if (!BPX.connected) return;
+  BPX.client.startScanning().then(function(){
+    log('Intiface: scanning 8s — power the toys on now.');
+    setTimeout(function(){
+      BPX.client.stopScanning().catch(function(){});
+      log('Intiface: scan finished, ' + BPX.devices.length + ' device(s) known.');
+    }, 8000);
+  }).catch(function(e){ log('Intiface: scan failed — ' + (e.message||e)); });
+}
+
+function bpDisconnect(){
+  Object.keys(devs).forEach(function(k){
+    var st = devs[k];
+    if (st.transport === 'bp' && st.connected){ st.bpDevice = null; onDisconnected(st); }
+  });
+  if (BPX.client){ try { BPX.client.disconnect(); } catch(e){} }
+  BPX.client = null; BPX.connector = null; BPX.connected = false; BPX.devices = [];
+  bpSetBadge('Not connected');
+  $('bpScan').disabled = true;
+  $('bpDisconnect').disabled = true;
+  $('bpConnect').disabled = false;
+  refreshBpSelects();
+  log('Intiface: disconnected.');
+}
+
+/* list the outputs a device exposes, tolerant of v4/v5 vs older shapes */
+function bpOutputs(d){
+  var out = [];
+  try {
+    if (d.features && typeof d.features.forEach === 'function'){
+      d.features.forEach(function(f, key){
+        var idx = (typeof key === 'number') ? key : (f && f.featureIndex !== undefined ? f.featureIndex : out.length);
+        var types = [];
+        if (f && f.outputs && typeof f.outputs.forEach === 'function'){
+          f.outputs.forEach(function(v, k){ types.push(k); });
+        } else if (f && f.Output){
+          types = Object.keys(f.Output);
+        }
+        if (!types.length) types = ['Vibrate'];
+        types.forEach(function(t){ out.push({ index:idx, type:t }); });
+      });
+    }
+  } catch(e){}
+  if (!out.length && d.vibrateAttributes){
+    for (var i=0;i<d.vibrateAttributes.length;i++) out.push({ index:i, type:'Vibrate' });
+  }
+  if (!out.length) out.push({ index:0, type:'Vibrate' });
+  return out;
+}
+
+function refreshBpSelects(){
+  Object.keys(devs).forEach(function(k){
+    var st = devs[k];
+    if (!st.ui.bpSel) return;
+    var cur = st.ui.bpSel.value;
+    st.ui.bpSel.innerHTML = '';
+    if (!BPX.devices.length){
+      var op = document.createElement('option');
+      op.value = ''; op.textContent = '(no device — scan first)';
+      st.ui.bpSel.appendChild(op);
+      return;
+    }
+    BPX.devices.forEach(function(d, i){
+      var op = document.createElement('option');
+      op.value = String(i); op.textContent = i + ': ' + d.name;
+      st.ui.bpSel.appendChild(op);
+    });
+    if (cur && BPX.devices[parseInt(cur,10)]) st.ui.bpSel.value = cur;
+  });
+}
+
+function bindBp(st){
+  if (!BPX.connected){ log('Connect to Intiface first.'); return; }
+  var i = parseInt(st.ui.bpSel.value, 10);
+  var d = BPX.devices[i];
+  if (!d){ log(st.def.name + ': pick an Intiface device first (scan in the Intiface panel).'); return; }
+  st.bpDevice = d;
+  st.bpApi = 0;
+  st.lastSent = null;
+
+  var outs = bpOutputs(d);
+  st.ui.bpOut.innerHTML = '';
+  outs.forEach(function(o, n){
+    var op = document.createElement('option');
+    op.value = n; op.textContent = o.type + ' (feature ' + o.index + ')';
+    st.ui.bpOut.appendChild(op);
+  });
+  // thrusting toys prefer an oscillating/linear output when the server exposes one
+  var prefer = st.def.motion === 'thrust' ? ['Oscillate','Linear','Rotate','Vibrate'] : ['Vibrate','Oscillate','Rotate'];
+  var choice = 0;
+  outer: for (var p=0;p<prefer.length;p++){
+    for (var q=0;q<outs.length;q++){ if (outs[q].type === prefer[p]){ choice = q; break outer; } }
+  }
+  st.ui.bpOut.value = String(choice);
+  st.bpFeature = outs[choice].index;
+  st.bpKind = outs[choice].type;
+  st.ui.bpOutWrap.style.display = 'block';
+  st.ui.bpOut.onchange = function(){
+    var o = outs[parseInt(this.value,10)];
+    st.bpFeature = o.index; st.bpKind = o.type; st.lastSent = null; st.bpApi = 0;
+    log(st.def.name + ': Intiface output → ' + o.type + ' #' + o.index);
+  };
+
+  st.connected = true;
+  setStatus(st, 'Connected', 'on');
+  st.ui.connectBtn.textContent = 'Rebind';
+  st.ui.disconnectBtn.disabled = false;
+  log(st.def.name + ': bound to Intiface device "' + d.name + '" — ' + outs.length +
+      ' output(s), using ' + st.bpKind + ' #' + st.bpFeature);
+  if (G.running && st.enabled) startDevice(st);
+  refreshToyCount();
+}
+
+/* try the v5 → v4 → v3 call shapes in order, remember the one that worked */
+function bpRun(st, v){
+  var BP = bpLib(), d = st.bpDevice;
+  var kind = st.bpKind || 'Vibrate', idx = st.bpFeature || 0;
+  var attempts = [
+    function(){ return d.runOutput(idx, BP.DeviceOutput[kind].percent(v)); },
+    function(){ return d.runOutput(BP.DeviceOutput[kind].percent(v)); },
+    function(){ return d.vibrate({ index: idx, scalar: v }); },
+    function(){ return d.vibrate(v); }
+  ];
+  function step(i){
+    if (i >= attempts.length) return Promise.reject(new Error('no working output API on this device'));
+    var r;
+    try { r = attempts[i](); } catch(e){ return step(i+1); }
+    return Promise.resolve(r).then(function(){ st.bpApi = i; }, function(){ return step(i+1); });
+  }
+  return step(st.bpApi || 0);
+}
+
+function bpSend(st, pct){
+  if (!st.bpDevice) return;
+  var q = clamp(Math.round(pct), 0, 100);
+  var nowMs = Date.now();
+  if (st.lastSent === q && (nowMs - st.lastSentAt) < 1000) return;   // dedupe + 1s refresh
+  st.lastSent = q; st.lastSentAt = nowMs;
+  withBle(st, function(){ return bpRun(st, q/100); }).catch(function(e){
+    log(st.def.name + ': Intiface write failed — ' + (e.message||e));
+  });
+}
+
+function bpStop(st){
+  if (!st.bpDevice) return;
+  st.lastSent = null;
+  withBle(st, function(){ return st.bpDevice.stop(); }).catch(function(){});
+}
+
+/* ================= settings readers ================= */
+function currentCmdTemplate(st){
+  if (!st.ui.cmdSel) return 'Vibrate:{v};';
+  var v = st.ui.cmdSel.value;
+  if (v === '__custom__') return st.ui.cmdCustom.value || 'Vibrate:{v};';
+  return v;
+}
+function currentDepthTemplate(st){
+  if (!st.ui.depthSel) return null;
+  var v = st.ui.depthSel.value;
+  if (v === '(none)') return null;
+  if (v === '__custom__') return st.ui.depthCustom.value || null;
+  return v;
+}
+function enabledPatterns(st){
+  var out = [];
+  st.ui.patBoxes.forEach(function(cb){ if (cb.checked) out.push(patternById(cb.value)); });
+  return out.length ? out : [PATTERNS[0]];
+}
+
+/* ================= audio ================= */
+var audioCtx = null, workletNode = null;
+var bgAudio = null, bgUrl = null;
+
+function ensureAudio(){
+  if (!audioCtx){
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function blip(when, freq, dur, gain){
+  if (!audioCtx) return;
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square';
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(gain, when + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(when); o.stop(when + dur + 0.02);
+}
+
+/* --- background keep-alive (silent media stream + audio-thread ticker) --- */
+function makeQuietWavUrl(seconds){
+  var sr = 8000, n = Math.round(sr * seconds);
+  var buf = new ArrayBuffer(44 + n*2), dv = new DataView(buf);
+  function ws(off, s){ for (var i=0;i<s.length;i++) dv.setUint8(off+i, s.charCodeAt(i)); }
+  ws(0,'RIFF');  dv.setUint32(4, 36 + n*2, true);  ws(8,'WAVE');
+  ws(12,'fmt '); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  ws(36,'data'); dv.setUint32(40, n*2, true);
+  for (var i=0;i<n;i++) dv.setInt16(44 + i*2, (i % 2) ? 1 : -1, true);
+  return URL.createObjectURL(new Blob([buf], { type:'audio/wav' }));
+}
+
+var WORKLET_SRC =
+  'class TickProcessor extends AudioWorkletProcessor{' +
+    'constructor(o){super();this.n=0;this.every=sampleRate*((o.processorOptions&&o.processorOptions.ms)||200)/1000;}' +
+    'process(){this.n+=128;if(this.n>=this.every){this.n=0;this.port.postMessage(1);}return true;}' +
+  '}' +
+  'registerProcessor("tick-processor",TickProcessor);';
+
+function startBackgroundAudio(){
+  if (!$('bgMode').checked || bgAudio) return Promise.resolve(false);
+  try {
+    bgUrl = makeQuietWavUrl(1);
+    bgAudio = new Audio(bgUrl);
+    bgAudio.loop = true;
+    bgAudio.volume = 0.02;
+    return bgAudio.play().then(function(){
+      log('Background mode ON — media notification active.');
+      setupMediaSession();
+      return startWorkletTicker();
+    }).catch(function(e){
+      log('Background audio refused (' + (e.message||e) + '); background mode is off.');
+      stopBackgroundAudio();
+      return false;
+    });
+  } catch(e){
+    log('Background mode unavailable: ' + (e.message||e));
+    return Promise.resolve(false);
+  }
+}
+
+function startWorkletTicker(){
+  if (!window.AudioWorkletNode || !ensureAudio()) return Promise.resolve(false);
+  if (workletNode) return Promise.resolve(true);
+  try {
+    var url = URL.createObjectURL(new Blob([WORKLET_SRC], { type:'application/javascript' }));
+    return audioCtx.audioWorklet.addModule(url).then(function(){
+      URL.revokeObjectURL(url);
+      workletNode = new AudioWorkletNode(audioCtx, 'tick-processor', { processorOptions:{ ms: TICK_MS } });
+      workletNode.port.onmessage = function(){ if (G.running) tick(); };
+      var g = audioCtx.createGain(); g.gain.value = 0;
+      workletNode.connect(g).connect(audioCtx.destination);
+      log('Audio-thread ticker running (' + TICK_MS + 'ms, not affected by tab throttling).');
+      return true;
+    }).catch(function(e){
+      log('AudioWorklet ticker unavailable (' + (e.message||e) + '); using setInterval.');
+      return false;
+    });
+  } catch(e){ return Promise.resolve(false); }
+}
+
+function stopBackgroundAudio(){
+  if (workletNode){ try { workletNode.port.onmessage = null; workletNode.disconnect(); } catch(e){} workletNode = null; }
+  if (bgAudio){ try { bgAudio.pause(); bgAudio.src = ''; } catch(e){} bgAudio = null; }
+  if (bgUrl){ URL.revokeObjectURL(bgUrl); bgUrl = null; }
+  if (navigator.mediaSession){
+    try { navigator.mediaSession.playbackState = 'none'; navigator.mediaSession.metadata = null; } catch(e){}
+  }
+}
+
+function setupMediaSession(){
+  if (!navigator.mediaSession) return;
+  var ms = navigator.mediaSession;
+  updateMediaMetadata();
+  ms.playbackState = 'playing';
+  function set(action, fn){ try { ms.setActionHandler(action, fn); } catch(e){} }
+  set('pause', function(){ stopGame(); });
+  set('stop',  function(){ stopGame(); });
+  set('play',  function(){ if (!G.running) startGame(); });
+}
+
+var lastMetaAt = 0;
+function updateMediaMetadata(){
+  if (!navigator.mediaSession || !window.MediaMetadata) return;
+  var now = Date.now();
+  if (now - lastMetaAt < 1000) return;
+  lastMetaAt = now;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: G.running ? (Math.round(G.energy) + '%  ·  combo ' + G.combo) : 'Rhythm Toy Game',
+      artist: G.running ? ('P' + G.perfect + ' / G' + G.good + ' / M' + G.miss) : 'Idle',
+      album: 'Pause = stop'
+    });
+  } catch(e){}
+}
+
+/* ================= game state ================= */
+var TICK_MS = 200;
+var tickTimer = null, uiTimer = null, rafId = null;
+
+var G = {
+  running:false,
+  mode:'4k',
+  lanes:4,
+  t0:0,                 // audioCtx.currentTime at song time 0
+  notes:[],             // {t, lane, state:'live'|'hit'|'miss'}
+  cursor:0,             // first note index not yet resolved (for miss sweep)
+  genBeat:0,            // built-in generator: next beat index to fill
+  genUntil:0,
+  energy:20,
+  combo:0, maxCombo:0,
+  perfect:0, good:0, miss:0,
+  punishUntil:0,        // ms epoch
+  lastEnergyAt:0,
+  srcNode:null,
+  buffer:null,
+  fileNotes:null
+};
+
+function songTime(){
+  if (!audioCtx) return 0;
+  return audioCtx.currentTime - G.t0 + (num($('offset'), 0) / 1000);
+}
+
+/* ---- chart generation: built-in metronome ---- */
+function beatDur(){ return 60 / clamp(num($('bpm'),100), 40, 220); }
+
+function generateAhead(){
+  if ($('source').value !== 'click') return;
+  var bd = beatDur();
+  var horizon = songTime() + 4.0;
+  var diff = $('difficulty').value;
+  var halfProb = diff === 'easy' ? 0 : (diff === 'normal' ? 0.35 : 0.75);
+  var lanes = G.lanes;
+  var lastLane = G.notes.length ? G.notes[G.notes.length-1].lane : -1;
+
+  while (G.genBeat * bd < horizon){
+    var base = G.genBeat * bd;
+    var slots = [base];
+    if (Math.random() < halfProb) slots.push(base + bd/2);
+    for (var i=0;i<slots.length;i++){
+      var t = slots[i];
+      if (t < songTime() + 0.15) continue;
+      var lane = 0;
+      if (lanes > 1){
+        do { lane = randInt(0, lanes-1); } while (lane === lastLane && Math.random() < 0.6);
+      }
+      lastLane = lane;
+      var n = { t:t, lane:lane, state:'live' };
+      G.notes.push(n);
+      if (audioCtx){
+        var when = G.t0 + t - (num($('offset'),0)/1000);
+        if (when > audioCtx.currentTime + 0.01){
+          blip(when, (G.genBeat % 4 === 0 && i === 0) ? 1200 : 800, 0.05, 0.18);
+        }
+      }
+    }
+    G.genBeat++;
+  }
+}
+
+/* ---- chart generation: audio file onset detection ---- */
+function analyseBuffer(buf){
+  var sr = buf.sampleRate;
+  var ch = buf.getChannelData(0);
+  var ch2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+  var hop = 512, win = 1024;
+  var frames = Math.floor((ch.length - win) / hop);
+  var env = new Float32Array(Math.max(0, frames));
+  for (var f=0; f<frames; f++){
+    var s = f*hop, e = 0;
+    for (var i=0;i<win;i++){
+      var v = ch2 ? (ch[s+i] + ch2[s+i]) * 0.5 : ch[s+i];
+      e += v*v;
+    }
+    env[f] = Math.sqrt(e/win);
+  }
+  // spectral-free onset: positive difference against a moving average
+  var W = 24, sens = clamp(num($('sens'),1.4), 0.8, 3);
+  var minGap = clamp(num($('minGap'),0.22), 0.08, 1);
+  var onsets = [], lastT = -10;
+  for (var f2=W; f2<frames-1; f2++){
+    var avg = 0;
+    for (var k=f2-W;k<f2;k++) avg += env[k];
+    avg /= W;
+    var cur = env[f2];
+    if (cur > avg*sens && cur >= env[f2-1] && cur >= env[f2+1]){
+      var t = (f2*hop + win/2) / sr;
+      if (t - lastT >= minGap){ onsets.push(t); lastT = t; }
+    }
+  }
+  var notes = [], lastLane = -1;
+  for (var j=0;j<onsets.length;j++){
+    var lane = 0;
+    if (G.lanes > 1){
+      do { lane = randInt(0, G.lanes-1); } while (lane === lastLane && Math.random() < 0.6);
+    }
+    lastLane = lane;
+    notes.push({ t:onsets[j], lane:lane, state:'live' });
+  }
+  return notes;
+}
+
+var loadedFileName = '';
+$('audioFile').addEventListener('change', function(){
+  var f = this.files && this.files[0];
+  if (!f) return;
+  loadedFileName = f.name;
+  $('fileInfo').textContent = 'Reading ' + f.name + ' …';
+  var reader = new FileReader();
+  reader.onload = function(){
+    var ac = ensureAudio();
+    if (!ac){ $('fileInfo').textContent = 'Web Audio unavailable.'; return; }
+    ac.decodeAudioData(reader.result.slice(0)).then(function(buf){
+      G.buffer = buf;
+      $('fileInfo').textContent = 'Decoded ' + f.name + ' (' + buf.duration.toFixed(1) + 's). Analysing…';
+      setTimeout(function(){
+        var t0 = performance.now();
+        G.fileNotes = analyseBuffer(buf);
+        $('fileInfo').textContent = f.name + ' — ' + G.fileNotes.length + ' notes detected in ' +
+          ((performance.now()-t0)/1000).toFixed(1) + 's. Adjust sensitivity and re-pick the file to redo.';
+        log('Audio analysed: ' + G.fileNotes.length + ' notes.');
+      }, 30);
+    }).catch(function(e){
+      $('fileInfo').textContent = 'Could not decode this file (' + (e.message||e) + ').';
+    });
+  };
+  reader.readAsArrayBuffer(f);
+});
+
+/* ================= judging ================= */
+var judgeEl = $('judgeText'), comboEl = $('comboText');
+var judgeTimer = null;
+function showJudge(text, color){
+  judgeEl.textContent = text;
+  judgeEl.style.color = color;
+  judgeEl.style.opacity = '1';
+  clearTimeout(judgeTimer);
+  judgeTimer = setTimeout(function(){ judgeEl.style.opacity = '0'; }, 260);
+}
+
+function addEnergy(d){
+  var lo = num($('eMin'),0), hi = num($('eMax'),100);
+  G.energy = clamp(G.energy + d, lo, hi);
+}
+
+function onPerfect(n){
+  G.perfect++; G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo);
+  addEnergy(num($('ePerfect'),3));
+  showJudge('PERFECT', '#3ddc97');
+  if ($('hitSound').checked && audioCtx) blip(audioCtx.currentTime, 1600, 0.04, 0.12);
+}
+function onGood(n){
+  G.good++; G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo);
+  addEnergy(num($('eGood'),1.5));
+  showJudge('GOOD', '#ffb03a');
+  if ($('hitSound').checked && audioCtx) blip(audioCtx.currentTime, 1100, 0.04, 0.10);
+}
+function onMiss(reason){
+  G.miss++; G.combo = 0;
+  G.punishUntil = Date.now() + clamp(num($('pSec'),0.5), 0.1, 5) * 1000;
+  addEnergy(-Math.abs(num($('eMiss'),15)));
+  showJudge(reason === 'stray' ? 'WRONG' : 'MISS', '#ff5470');
+  Object.keys(devs).forEach(function(k){ devs[k].lastSent = null; });
+  if ($('hitSound').checked && audioCtx) blip(audioCtx.currentTime, 240, 0.12, 0.14);
+}
+
+function press(lane){
+  if (!G.running) return;
+  flashKey(lane);
+  var t = songTime();
+  var wP = num($('wPerfect'),70)/1000, wG = num($('wGood'),140)/1000;
+  var best = null, bestDt = 1e9;
+  for (var i=G.cursor; i<G.notes.length; i++){
+    var n = G.notes[i];
+    if (n.t - t > wG + 0.05) break;
+    if (n.state !== 'live') continue;
+    if (n.lane !== lane) continue;
+    var dt = Math.abs(n.t - t);
+    if (dt < bestDt){ bestDt = dt; best = n; }
+  }
+  if (best && bestDt <= wG){
+    best.state = 'hit';
+    if (bestDt <= wP) onPerfect(best); else onGood(best);
+    return;
+  }
+  if ($('strayMiss').checked) onMiss('stray');
+}
+
+function sweepMisses(){
+  var t = songTime();
+  var wG = num($('wGood'),140)/1000;
+  while (G.cursor < G.notes.length){
+    var n = G.notes[G.cursor];
+    if (n.state === 'live' && n.t + wG < t){ n.state = 'miss'; onMiss('late'); G.cursor++; continue; }
+    if (n.state !== 'live'){ G.cursor++; continue; }
+    break;
+  }
+}
+
+/* ================= per-device output ================= */
+function rollPattern(st, now){
+  st.pattern = pick(enabledPatterns(st));
+  st.patternStart = now;
+  st.patternChangeAt = now + num(st.ui.patInterval, 5) * 1000;
+  if (st.def.motion === 'thrust' && st.ui.depthRandom && st.ui.depthRandom.checked){
+    var lo = num(st.ui.depthMin, 0), hi = num(st.ui.depthMax, 20);
+    if (hi < lo) { var t2 = lo; lo = hi; hi = t2; }
+    var span = Math.max(1, Math.round((hi - lo) * 0.25));
+    var a = randInt(lo, Math.max(lo, hi - span));
+    var b = randInt(Math.min(hi, a + span), hi);
+    st.depthA = a; st.depthB = b;
+    var dt = currentDepthTemplate(st);
+    if (dt) sendRaw(st, dt.replace('{a}', a).replace('{b}', b).replace('{v}', st.lastSent||0));
+    log(st.def.name + ': pattern ' + st.pattern.name + ', stroke ' + a + '→' + b);
+    return;
+  }
+  log(st.def.name + ': pattern ' + st.pattern.name);
+}
+
+function startDevice(st){
+  if (!st.connected || !st.enabled || st.running) return;
+  st.running = true;
+  st.lastSent = null;
+  rollPattern(st, Date.now());
+}
+
+function stopDevice(st){
+  if (!st.running && st.lastSent === null) return;
+  st.running = false;
+  hardStop(st);
+  st.ui.bar.style.width = '0%';
+  st.ui.now.textContent = '—';
+  st.ui.pat.textContent = '—';
+}
+
+function activeStates(){
+  return Object.keys(devs).map(function(k){ return devs[k]; })
+    .filter(function(st){ return st.connected && st.enabled; });
+}
+function refreshToyCount(){
+  $('sToys').textContent = G.running
+    ? Object.keys(devs).filter(function(k){ return devs[k].running; }).length
+    : activeStates().length;
+}
+
+function tick(){
+  var now = Date.now();
+
+  // idle decay
+  var dec = num($('eDecay'), 0);
+  if (dec > 0 && G.lastEnergyAt){
+    addEnergy(-dec * (now - G.lastEnergyAt) / 1000);
+  }
+  G.lastEnergyAt = now;
+
+  var punishing = now < G.punishUntil;
+  var punishPct = clamp(num($('pPct'),70), 0, 100);
+  var punishStutter = $('pStyle').value === 'stutter';
+
+  Object.keys(devs).forEach(function(k){
+    var st = devs[k];
+    if (!st.running || !st.connected) return;
+    var scale = num(st.ui.scale, 100) / 100;
+    var maxP = num($('eMax'), 100);
+    var out;
+
+    if (punishing){
+      var p = punishPct;
+      if (punishStutter) p = (Math.floor(now/120) % 2) ? punishPct : punishPct*0.15;
+      out = clamp(p * scale, 0, 100);
+      st.ui.pat.textContent = 'Punish';
+    } else {
+      if (now >= st.patternChangeAt) rollPattern(st, now);
+      var t = (now - st.patternStart) / 1000;
+      out = clamp(st.pattern.calc(t, G.energy) * scale, 0, Math.max(maxP, 100));
+      st.ui.pat.textContent = st.pattern.name;
+    }
+
+    sendIntensity(st, out);
+    st.ui.bar.style.width = clamp(out,0,100) + '%';
+    st.ui.now.textContent = Math.round(out) + '%';
+  });
+}
+
+/* ================= render loop ================= */
+var cv = $('field'), cx = cv.getContext('2d');
+var LANE_COLORS = ['#ff4d8d','#ffb03a','#3ddc97','#6b5bff'];
+
+function resizeCanvas(){
+  var w = cv.clientWidth;
+  var dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(420 * dpr);
+  cv.style.height = '420px';
+  cx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize', resizeCanvas);
+
+function draw(){
+  rafId = requestAnimationFrame(draw);
+  var W = cv.clientWidth, H = 420;
+  var judgeY = H - 62;
+  cx.clearRect(0,0,W,H);
+
+  // lanes
+  var lanes = G.lanes, lw = W / lanes;
+  for (var i=0;i<lanes;i++){
+    cx.fillStyle = (i%2) ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)';
+    cx.fillRect(i*lw, 0, lw, H);
+  }
+  // judge line
+  cx.fillStyle = 'rgba(255,255,255,0.22)';
+  cx.fillRect(0, judgeY, W, 2);
+
+  if (G.running){
+    var t = songTime();
+    var app = clamp(num($('source').value === 'file' ? $('approach2') : $('approach'), 1.6), 0.6, 4);
+    for (var j=Math.max(0,G.cursor-4); j<G.notes.length; j++){
+      var n = G.notes[j];
+      var dt = n.t - t;
+      if (dt > app) break;
+      if (dt < -0.35) continue;
+      if (n.state === 'hit') continue;
+      var y = judgeY - (dt / app) * judgeY;
+      var x = n.lane * lw + 6;
+      cx.fillStyle = n.state === 'miss' ? 'rgba(255,84,112,0.35)' : LANE_COLORS[n.lane % 4];
+      roundRect(cx, x, y-9, lw-12, 18, 6);
+      cx.fill();
+    }
+    // punish flash
+    if (Date.now() < G.punishUntil){
+      cx.fillStyle = 'rgba(255,84,112,0.16)';
+      cx.fillRect(0,0,W,H);
+    }
+  } else {
+    cx.fillStyle = '#8b8ba3';
+    cx.font = '600 15px system-ui, sans-serif';
+    cx.textAlign = 'center';
+    cx.fillText('Press Start Game', W/2, H/2);
+    cx.textAlign = 'left';
+  }
+}
+function roundRect(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+}
+
+/* ================= key pads ================= */
+var KEY_LABELS_4 = ['D','F','J','K'];
+function buildKeys(){
+  var wrap = $('keys');
+  wrap.innerHTML = '';
+  wrap.className = 'keys ' + (G.lanes === 4 ? 'k4' : 'k1');
+  for (var i=0;i<G.lanes;i++){
+    var d = document.createElement('div');
+    d.className = 'key l' + i;
+    d.textContent = G.lanes === 4 ? KEY_LABELS_4[i] : 'TAP  /  SPACE';
+    d.setAttribute('data-lane', i);
+    wrap.appendChild(d);
+  }
+}
+function flashKey(lane){
+  var el = $('keys').querySelector('[data-lane="' + lane + '"]');
+  if (!el) return;
+  el.classList.add('hot');
+  setTimeout(function(){ el.classList.remove('hot'); }, 90);
+}
+$('keys').addEventListener('pointerdown', function(e){
+  var el = e.target.closest('.key');
+  if (!el) return;
+  e.preventDefault();
+  press(parseInt(el.getAttribute('data-lane'), 10));
+});
+document.addEventListener('keydown', function(e){
+  if (e.repeat) return;
+  if (G.lanes === 1){
+    if (e.code === 'Space' || e.key === ' '){ e.preventDefault(); press(0); }
+    return;
+  }
+  var map = { KeyD:0, KeyF:1, KeyJ:2, KeyK:3 };
+  if (map[e.code] !== undefined){ e.preventDefault(); press(map[e.code]); }
+});
+
+/* ================= start / stop ================= */
+function startGame(){
+  if (G.running) return;
+  var ac = ensureAudio();
+  if (!ac){ log('Web Audio unavailable — cannot run the rhythm clock.'); return; }
+
+  G.mode  = $('mode').value;
+  G.lanes = G.mode === '4k' ? 4 : 1;
+  buildKeys();
+
+  var useFile = $('source').value === 'file';
+  if (useFile && (!G.buffer || !G.fileNotes || !G.fileNotes.length)){
+    log('Load and analyse an audio file first, or switch to the built-in metronome.');
+    return;
+  }
+
+  G.notes = []; G.cursor = 0; G.genBeat = 0;
+  G.energy = clamp(num($('eStart'),20), num($('eMin'),0), num($('eMax'),100));
+  G.combo = 0; G.maxCombo = 0; G.perfect = 0; G.good = 0; G.miss = 0;
+  G.punishUntil = 0; G.lastEnergyAt = Date.now();
+
+  var lead = 2.0;
+  G.t0 = ac.currentTime + lead;
+
+  if (useFile){
+    // re-lane the analysed notes for the current mode
+    var lastLane = -1;
+    G.notes = G.fileNotes.map(function(n){
+      var lane = 0;
+      if (G.lanes > 1){
+        do { lane = randInt(0, G.lanes-1); } while (lane === lastLane && Math.random() < 0.6);
+      }
+      lastLane = lane;
+      return { t:n.t, lane:lane, state:'live' };
+    });
+    G.srcNode = ac.createBufferSource();
+    G.srcNode.buffer = G.buffer;
+    G.srcNode.connect(ac.destination);
+    G.srcNode.start(G.t0);
+    log('Playing ' + loadedFileName + ' — ' + G.notes.length + ' notes.');
+  } else {
+    log('Metronome chart at ' + num($('bpm'),100) + ' BPM (' + $('difficulty').value + ').');
+  }
+
+  G.running = true;
+  $('startGame').disabled = true;
+  $('stopGame').disabled = false;
+
+  activeStates().forEach(startDevice);
+  if (!tickTimer) tickTimer = setInterval(tick, TICK_MS);
+  if (!uiTimer)   uiTimer   = setInterval(updateUi, 100);
+  if (!rafId) draw();
+  requestWakeLock();
+  startBackgroundAudio();   // must stay inside the click, it needs the user gesture
+  refreshToyCount();
+  log('=== Game started with ' + activeStates().length + ' toy(s) ===');
+}
+
+function stopGame(){
+  G.running = false;
+  if (G.srcNode){ try { G.srcNode.stop(); } catch(e){} G.srcNode = null; }
+  Object.keys(devs).forEach(function(k){ stopDevice(devs[k]); });
+  if (tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+  if (uiTimer){ clearInterval(uiTimer); uiTimer = null; }
+  stopBackgroundAudio();
+  $('startGame').disabled = false;
+  $('stopGame').disabled = true;
+  log('=== Game stopped — P' + G.perfect + ' / G' + G.good + ' / M' + G.miss +
+      ', max combo ' + G.maxCombo + ' ===');
+  refreshToyCount();
+}
+
+function panic(){
+  stopGame();
+  Object.keys(devs).forEach(function(k){ hardStop(devs[k]); });
+  log('PANIC: all toys stopped.');
+}
+
+/* ================= ui refresh ================= */
+function updateUi(){
+  if (G.running){
+    generateAhead();
+    sweepMisses();
+  }
+  $('sEnergy').textContent = Math.round(G.energy) + '%';
+  $('sCombo').textContent = G.combo;
+  var tot = G.perfect + G.good + G.miss;
+  $('sAcc').textContent = tot ? (Math.round((G.perfect + G.good*0.5) / tot * 100) + '%') : '—';
+  $('energyFill').style.width = clamp(G.energy,0,100) + '%';
+  $('energyBar').className = 'energy' + (Date.now() < G.punishUntil ? ' punish' : '');
+  comboEl.textContent = G.combo > 2 ? (G.combo + ' combo') : '';
+  updateMediaMetadata();
+  refreshToyCount();
+}
+
+/* ================= wake lock ================= */
+var wakeLock = null;
+function requestWakeLock(){
+  if (!navigator.wakeLock || wakeLock) return;
+  navigator.wakeLock.request('screen').then(function(wl){
+    wakeLock = wl;
+    wl.addEventListener('release', function(){ wakeLock = null; });
+    log('Screen wake lock acquired.');
+  }).catch(function(){});
+}
+
+/* ================= device cards ================= */
+function buildDevice(def){
+  var st = makeState(def);
+  devs[def.id] = st;
+
+  var sec = document.createElement('section');
+  var isThrust = def.motion === 'thrust';
+  var isLov = def.brand === 'lovense';
+
+  sec.innerHTML =
+    '<div class="dev-head">' +
+      '<div class="title"><div class="n">' + def.name + '</div>' +
+      '<div class="t">' + def.type + (isLov ? ' · Lovense ASCII' : ' · Satisfyer raw bytes') + '</div></div>' +
+      '<span class="badge">Disconnected</span>' +
+    '</div>' +
+
+    '<div class="switch" style="margin-bottom:9px;">' +
+      '<input type="checkbox" checked data-r="enabled"><span>Enabled — include this device in the game</span>' +
+    '</div>' +
+
+    '<div class="grid2" style="margin-bottom:9px;">' +
+      '<div><label>Transport</label>' +
+        '<select data-r="transport"><option value="ble" selected>Direct BLE (default)</option>' +
+        '<option value="bp">Intiface</option></select></div>' +
+      '<div data-r="bpWrap" style="display:none;"><label>Intiface device</label>' +
+        '<select data-r="bpSel"></select></div>' +
+    '</div>' +
+    '<div data-r="bpOutWrap" style="display:none; margin-bottom:9px;">' +
+      '<label>Output</label><select data-r="bpOut"></select></div>' +
+
+    '<div class="btn-row">' +
+      '<button class="b-primary" data-r="connectBtn">Connect</button>' +
+      '<button class="b-ghost" data-r="disconnectBtn" disabled>Disconnect</button>' +
+    '</div>' +
+
+    (def.brand === 'satisfyer'
+      ? '<div class="switch" style="margin-top:9px;">' +
+          '<input type="checkbox" data-r="sfScanAll"><span>Scan all BLE devices (use if "SF Signet Ring" is not listed — the name may not be advertised)</span>' +
+        '</div>'
+      : '') +
+
+    '<div class="grid2" style="margin-top:11px;">' +
+      '<div class="stat"><div class="k">Output</div><div class="v" data-r="now">—</div></div>' +
+      '<div class="stat"><div class="k">Pattern</div><div class="v" data-r="pat" style="font-size:14px;">—</div></div>' +
+    '</div>' +
+    '<div class="bar"><i data-r="bar"></i></div>' +
+
+    '<details>' +
+      '<summary>Settings</summary>' +
+      '<div class="body">' +
+
+        '<div class="fieldset-title">Pattern &amp; scale</div>' +
+        '<div class="grid3">' +
+          '<div><label>Re-roll every (s)</label><input type="number" data-r="patInterval" value="5" min="1" max="120" step="1"></div>' +
+          '<div><label>Scale %</label><input type="number" data-r="scale" value="' + def.scale + '" min="1" max="200" step="1"></div>' +
+          '<div><label>Cmd value max</label><input type="number" data-r="valueMax" value="' + def.valueMax + '" min="1" max="255" step="1"' + (isLov ? '' : ' disabled') + '></div>' +
+        '</div>' +
+        (isThrust ? '<p class="hint" style="margin-top:6px;">Scale 50% = thrusting speed runs at half the vibrators\' intensity.</p>' : '') +
+
+        '<div class="fieldset-title">Pattern pool</div>' +
+        '<div class="pat-pool" data-r="patPool"></div>' +
+
+        (isThrust
+          ? '<div class="fieldset-title">Stroke range</div>' +
+            '<div class="switch" style="margin-bottom:8px;">' +
+              '<input type="checkbox" checked data-r="depthRandom"><span>Randomise stroke start/end on every pattern change</span>' +
+            '</div>' +
+            '<div class="grid2">' +
+              '<div><label>Min position</label><input type="number" data-r="depthMin" value="0" min="0" max="255" step="1"></div>' +
+              '<div><label>Max position</label><input type="number" data-r="depthMax" value="20" min="0" max="255" step="1"></div>' +
+            '</div>'
+          : '') +
+
+      '</div>' +
+    '</details>' +
+
+    (isLov
+      ? '<details>' +
+          '<summary>Command format' + (isThrust ? ' — unverified, try candidates here' : '') + '</summary>' +
+          '<div class="body">' +
+            '<label>Speed / intensity command</label>' +
+            '<select data-r="cmdSel"></select>' +
+            '<input type="text" data-r="cmdCustom" placeholder="custom, e.g. Thrusting:{v};" style="margin-top:7px; display:none;">' +
+            (isThrust
+              ? '<label style="margin-top:11px;">Stroke-range command</label>' +
+                '<select data-r="depthSel"></select>' +
+                '<input type="text" data-r="depthCustom" placeholder="custom, e.g. DepthRange:{a}:{b};" style="margin-top:7px; display:none;">'
+              : '') +
+            '<p class="hint"><code>{v}</code> = intensity 0..max · <code>{a}</code>/<code>{b}</code> = stroke start/end.</p>' +
+            '<div class="fieldset-title">Raw console</div>' +
+            '<div class="inline">' +
+              '<input type="text" data-r="rawIn" placeholder="DeviceType;">' +
+              '<button class="b-ghost" data-r="rawBtn">Send</button>' +
+            '</div>' +
+            '<p class="hint">Responses appear in the log.</p>' +
+          '</div>' +
+        '</details>'
+      : '<details>' +
+          '<summary>Protocol notes</summary>' +
+          '<div class="body"><p class="hint">' +
+            'Service <code>51361500-…</code> · mode <code>…1501</code> (<code>0x01</code> start / <code>0x07</code> stop) · ' +
+            'value <code>…1502</code>, 4 bytes <b>big-endian</b> <code>[0,0,0,v]</code>, v = 0–100.' +
+          '</p></div>' +
+        '</details>');
+
+  $('devices').appendChild(sec);
+
+  sec.querySelectorAll('[data-r]').forEach(function(el){ st.ui[el.getAttribute('data-r')] = el; });
+  st.ui.badge = sec.querySelector('.badge');
+
+  st.ui.patBoxes = [];
+  PATTERNS.forEach(function(p){
+    var l = document.createElement('label');
+    var cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = p.id; cb.checked = true;
+    l.appendChild(cb);
+    l.appendChild(document.createTextNode(p.name));
+    st.ui.patPool.appendChild(l);
+    st.ui.patBoxes.push(cb);
+  });
+
+  if (isLov){
+    def.cmdOptions.concat(['__custom__']).forEach(function(o){
+      var op = document.createElement('option');
+      op.value = o; op.textContent = (o === '__custom__' ? 'Custom…' : o);
+      st.ui.cmdSel.appendChild(op);
+    });
+    st.ui.cmdSel.value = def.cmdDefault;
+    st.ui.cmdSel.addEventListener('change', function(){
+      st.ui.cmdCustom.style.display = (this.value === '__custom__') ? 'block' : 'none';
+    });
+    if (isThrust){
+      def.depthOptions.concat(['__custom__']).forEach(function(o){
+        var op = document.createElement('option');
+        op.value = o; op.textContent = (o === '__custom__' ? 'Custom…' : o);
+        st.ui.depthSel.appendChild(op);
+      });
+      st.ui.depthSel.value = def.depthDefault;
+      st.ui.depthSel.addEventListener('change', function(){
+        st.ui.depthCustom.style.display = (this.value === '__custom__') ? 'block' : 'none';
+      });
+    }
+    st.ui.rawBtn.addEventListener('click', function(){
+      var v = st.ui.rawIn.value.trim();
+      if (v) sendRaw(st, v);
+    });
+    st.ui.rawIn.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ var v = this.value.trim(); if (v) sendRaw(st, v); }
+    });
+  }
+
+  st.ui.transport.addEventListener('change', function(){
+    if (st.connected) disconnect(st);
+    st.transport = this.value;
+    var bp = st.transport === 'bp';
+    st.ui.bpWrap.style.display = bp ? 'block' : 'none';
+    st.ui.bpOutWrap.style.display = 'none';
+    st.ui.connectBtn.textContent = bp ? 'Bind' : 'Connect';
+    st.ui.connectBtn.disabled = false;
+    if (st.ui.sfScanAll) st.ui.sfScanAll.parentNode.style.display = bp ? 'none' : 'flex';
+    if (bp) refreshBpSelects();
+    log(st.def.name + ': transport = ' + (bp ? 'Intiface' : 'Direct BLE'));
+  });
+
+  st.ui.enabled.addEventListener('change', function(){
+    st.enabled = this.checked;
+    if (!st.enabled && st.running) stopDevice(st);
+    if (st.enabled && G.running && st.connected) startDevice(st);
+    refreshToyCount();
+  });
+  st.ui.connectBtn.addEventListener('click', function(){ connect(st); });
+  st.ui.disconnectBtn.addEventListener('click', function(){ disconnect(st); });
+
+  return st;
+}
+
+/* ================= boot ================= */
+DEFS.forEach(buildDevice);
+resizeCanvas();
+buildKeys();
+draw();
+
+$('mode').addEventListener('change', function(){
+  G.lanes = this.value === '4k' ? 4 : 1;
+  buildKeys();
+});
+$('source').addEventListener('change', function(){
+  var f = this.value === 'file';
+  $('fileOpts').style.display = f ? 'block' : 'none';
+  $('clickOpts').style.display = f ? 'none' : 'grid';
+});
+['ePerfect','eGood','eMiss'].forEach(function(id){
+  $(id).addEventListener('change', function(){
+    $('energyHint').textContent = 'Perfect +' + num($('ePerfect'),3) + ' · Good +' + num($('eGood'),1.5) +
+      ' · Miss −' + num($('eMiss'),15) + ' after the punish pulse';
+  });
+});
+
+$('bpConnect').addEventListener('click', bpConnect);
+$('bpScan').addEventListener('click', bpScan);
+$('bpDisconnect').addEventListener('click', bpDisconnect);
+
+$('startGame').addEventListener('click', startGame);
+$('stopGame').addEventListener('click', stopGame);
+$('panic').addEventListener('click', panic);
+$('clearLog').addEventListener('click', function(){ logEl.textContent = ''; });
+$('wakeBtn').addEventListener('click', requestWakeLock);
+
+$('bgMode').addEventListener('change', function(){
+  if (this.checked){ if (G.running) startBackgroundAudio(); }
+  else { stopBackgroundAudio(); log('Background mode OFF.'); }
+});
+
+window.addEventListener('beforeunload', function(){
+  Object.keys(devs).forEach(function(k){ hardStop(devs[k]); });
+});
+
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible'){
+    requestWakeLock();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+});
+
+window.__rtg = { G:G, devs:devs, press:press, songTime:songTime };  // debug handle
+refreshToyCount();
+refreshBpSelects();
+log('Ready. Connect your toys, pick a mode, then press Start Game.');
+log('Transport defaults to Direct BLE; the Intiface panel is only for testing.');
+if (!navigator.bluetooth) log('WARNING: Web Bluetooth unavailable — needs Chrome on Android over HTTPS.');
+})();
+</script>
+</body>
+</html>
