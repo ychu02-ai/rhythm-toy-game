@@ -422,7 +422,23 @@ var SF_SVC_LIVE   = '51361500-c5e7-47c7-8a6e-47ebc99d80e8';
 var SF_CH_MODE    = '51361501-c5e7-47c7-8a6e-47ebc99d80e8';
 var SF_CH_VALUE   = '51361502-c5e7-47c7-8a6e-47ebc99d80e8';
 var SF_SVC_DEVICE = '51361600-c5e7-47c7-8a6e-47ebc99d80e8';
-var SF_OPTIONAL   = [SF_SVC_LIVE, SF_SVC_DEVICE, 'battery_service', 'device_information'];
+/* Satisfyer models do not all expose the same live-control service, and Web Bluetooth can only
+   reach services declared BEFORE connecting — so declare the whole 5136xx00 family plus the
+   generic vendor services, and let the user paste extra UUIDs for anything not covered. */
+var SF_BASE = '-c5e7-47c7-8a6e-47ebc99d80e8';
+var SF_FAMILY = ['51361100','51361200','51361300','51361400','51361500',
+                 '51361600','51361700','51361800','51361900'].map(function(x){ return x + SF_BASE; });
+var SF_GENERIC = [
+  '0000fff0-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb',
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+  'battery_service', 'device_information', 'generic_access'
+];
+function sfOptionalServices(extraText){
+  var extra = (extraText || '').split(/[\s,;]+/).filter(function(x){ return /^[0-9a-fA-F-]{4,}$/.test(x); })
+                .map(function(x){ return x.toLowerCase(); });
+  return SF_FAMILY.concat(SF_GENERIC).concat(extra);
+}
 var SF_MODE_START = 0x01, SF_MODE_PAUSE = 0x03, SF_MODE_STOP = 0x07;
 
 /* ================= device definitions ================= */
@@ -552,9 +568,11 @@ function connectLovense(st){
 /* ---- Satisfyer ---- */
 function connectSatisfyer(st){
   var scanAll = st.ui.sfScanAll && st.ui.sfScanAll.checked;
+  var services = sfOptionalServices(st.ui.sfExtra ? st.ui.sfExtra.value : '');
   var opts = scanAll
-    ? { acceptAllDevices:true, optionalServices: SF_OPTIONAL }
-    : { filters:[{ namePrefix:'SF' }], optionalServices: SF_OPTIONAL };
+    ? { acceptAllDevices:true, optionalServices: services }
+    : { filters:[{ namePrefix:'SF' }, { namePrefix:'Satisfyer' }, { services:[SF_SVC_LIVE] }],
+        optionalServices: services };
   return navigator.bluetooth.requestDevice(opts).then(function(bt){
     st.bt = bt;
     bt.addEventListener('gattserverdisconnected', function(){ onDisconnected(st); });
@@ -564,33 +582,45 @@ function connectSatisfyer(st){
     st.server = server;
     return delay(600);
   }).then(function(){
-    return st.server.getPrimaryService(SF_SVC_LIVE).catch(function(){
-      // Signet Ring / other models may expose a different live-control service — enumerate and pick one
-      log(st.def.name + ': ' + SF_SVC_LIVE.slice(0,8) + ' not found, enumerating services…');
-      return st.server.getPrimaryServices().then(function(svcs){
-        log(st.def.name + ': services = ' + svcs.map(function(x){ return x.uuid.slice(0,8); }).join(', '));
-        var cand = svcs.filter(function(x){ return /^5136/.test(x.uuid); });
-        if (!cand.length) throw new Error('no Satisfyer live-control service (5136xxxx) on this device');
-        log(st.def.name + ': using ' + cand[0].uuid.slice(0,8));
-        return cand[0];
+    // Enumerate everything we may see, then take the first service carrying a usable
+    // mode + value pair. Covers Epic Duo (…1500) and any model sitting on another 5136xx00.
+    return st.server.getPrimaryServices().then(function(svcs){
+      log(st.def.name + ': services = ' + (svcs.length
+        ? svcs.map(function(x){ return x.uuid.slice(0,8); }).join(', ')
+        : '(none visible — paste its UUID into "Extra service UUIDs")'));
+      var ordered = svcs.slice().sort(function(a,b){
+        if (a.uuid === SF_SVC_LIVE) return -1;
+        if (b.uuid === SF_SVC_LIVE) return 1;
+        return (/^5136/.test(a.uuid)?0:1) - (/^5136/.test(b.uuid)?0:1);
       });
-    });
-  }).then(function(svc){
-    return svc.getCharacteristics().then(function(chs){
-      var writable = chs.filter(function(c){ return c.properties.write || c.properties.writeWithoutResponse; });
-      log(st.def.name + ': characteristics = ' + chs.map(function(c){ return c.uuid.slice(0,8); }).join(', '));
-      var mode = null, val = null;
-      chs.forEach(function(c){
-        var tag = c.uuid.slice(4,8);              // e.g. '1501' / '1502'
-        if (/01$/.test(tag) && !mode) mode = c;
-        if (/02$/.test(tag) && !val)  val  = c;
+      var found = null, chain = Promise.resolve();
+      ordered.forEach(function(svc){
+        chain = chain.then(function(){
+          if (found) return null;
+          return svc.getCharacteristics().then(function(chs){
+            var writable = chs.filter(function(c){ return c.properties.write || c.properties.writeWithoutResponse; });
+            log(st.def.name + ': ' + svc.uuid.slice(0,8) + ' → ' + chs.map(function(c){
+              return c.uuid.slice(0,8) + ((c.properties.write || c.properties.writeWithoutResponse) ? '(w)' : '');
+            }).join(', '));
+            if (writable.length < 2) return null;
+            var mode = null, val = null;
+            writable.forEach(function(c){
+              var tag = c.uuid.slice(4,8);
+              if (/01$/.test(tag) && !mode) mode = c;
+              if (/02$/.test(tag) && !val)  val  = c;
+            });
+            mode = mode || writable[0];
+            val  = val  || (writable[1] !== mode ? writable[1] : null);
+            if (!mode || !val || mode === val) return null;
+            found = [mode, val, svc];
+          }).catch(function(){ return null; });
+        });
       });
-      if (!mode || !val){                          // fall back to declaration order
-        mode = mode || writable[0];
-        val  = val  || writable[1] || writable[0];
-      }
-      if (!mode || !val) throw new Error('no writable mode/value characteristics found');
-      return [mode, val];
+      return chain.then(function(){
+        if (!found) throw new Error('no service with a writable mode+value pair — check the log, then paste the right UUID into "Extra service UUIDs"');
+        log(st.def.name + ': using service ' + found[2].uuid.slice(0,8));
+        return found;
+      });
     });
   }).then(function(chs){
     st.sfMode = chs[0]; st.sfValue = chs[1];
@@ -698,10 +728,18 @@ function sendIntensity(st, pct){
       st.sfStarted = true;
       withBle(st, function(){ return writeCh(st.sfMode, Uint8Array.of(SF_MODE_START)); }).catch(function(){});
     }
-    withBle(st, function(){ return writeCh(st.sfValue, Uint8Array.of(0,0,0,v)); }).catch(function(e){
+    withBle(st, function(){ return writeCh(st.sfValue, sfPayload(st, v)); }).catch(function(e){
       log(def.name + ': write failed — ' + (e.message||e));
     });
   }
+}
+
+/* value encoding: Epic Duo needs 4 bytes big-endian; other models can be switched in the UI */
+function sfPayload(st, v){
+  var mode = st.ui.sfEndian ? st.ui.sfEndian.value : 'be';
+  if (mode === 'le')  return Uint8Array.of(v,0,0,0);
+  if (mode === 'one') return Uint8Array.of(v);
+  return Uint8Array.of(0,0,0,v);
 }
 
 function hardStop(st){
@@ -714,7 +752,7 @@ function hardStop(st){
     sendRaw(st, s);
   } else {
     st.sfStarted = false;
-    withBle(st, function(){ return writeCh(st.sfValue, Uint8Array.of(0,0,0,0)); }).catch(function(){});
+    withBle(st, function(){ return writeCh(st.sfValue, sfPayload(st, 0)); }).catch(function(){});
     withBle(st, function(){ return writeCh(st.sfMode, Uint8Array.of(SF_MODE_STOP)); }).catch(function(){});
   }
 }
@@ -1793,6 +1831,14 @@ function buildDevice(def){
     (def.brand === 'satisfyer'
       ? '<div class="switch" style="margin-top:9px;">' +
           '<input type="checkbox" checked data-r="sfScanAll"><span>Scan all BLE devices — Satisfyer toys do not advertise a name, so this is normally required. Pick the strongest signal.</span>' +
+        '</div>' +
+        '<div class="grid2" style="margin-top:9px;">' +
+          '<div><label>Extra service UUIDs (optional)</label>' +
+            '<input type="text" data-r="sfExtra" placeholder="paste from nRF Connect, comma separated"></div>' +
+          '<div><label>Value byte order</label><select data-r="sfEndian">' +
+            '<option value="be" selected>Big-endian [0,0,0,v]</option>' +
+            '<option value="le">Little-endian [v,0,0,0]</option>' +
+            '<option value="one">Single byte [v]</option></select></div>' +
         '</div>'
       : '') +
 
