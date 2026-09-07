@@ -62,6 +62,14 @@
   #stage{ position:relative; }
   #field{ width:100%; display:block; background:#08080e;
           border:1px solid var(--border); border-radius:12px; touch-action:none; }
+  #phaseText{
+    position:absolute; left:8px; right:8px; top:50%; transform:translateY(-50%);
+    text-align:center; pointer-events:none; display:none;
+    background:rgba(8,8,14,.86); border:1px solid var(--border); border-radius:14px; padding:16px 12px;
+  }
+  #phaseText .big{ font-size:34px; font-weight:800; letter-spacing:1px; }
+  #phaseText .mid{ font-size:17px; font-weight:700; margin-top:6px; }
+  #phaseText .small{ font-size:12px; color:var(--muted); margin-top:8px; }
   #judgeText{
     position:absolute; left:0; right:0; top:38%; text-align:center;
     font-size:30px; font-weight:800; letter-spacing:1px; pointer-events:none;
@@ -148,16 +156,17 @@
       <div class="stat"><div class="k">Energy</div><div class="v" id="sEnergy">20%</div></div>
       <div class="stat"><div class="k">Combo</div><div class="v" id="sCombo">0</div></div>
       <div class="stat"><div class="k">Accuracy</div><div class="v" id="sAcc" style="font-size:15px;">&mdash;</div></div>
-      <div class="stat"><div class="k">Toys</div><div class="v" id="sToys">0</div></div>
+      <div class="stat"><div class="k">Time left</div><div class="v" id="sTime" style="font-size:15px;">&mdash;</div></div>
     </div>
 
     <div class="energy" id="energyBar"><i id="energyFill"></i></div>
-    <p class="hint" style="margin:0 0 10px;" id="energyHint">Perfect +3 &middot; Good +1.5 &middot; Miss &minus;15 after the punish pulse</p>
+    <p class="hint" style="margin:0 0 10px;" id="energyHint">Perfect +3 &middot; Good +1.5 &middot; Miss &minus;15 after the punish pulse &middot; Toys connected: <b id="sToys">0</b></p>
 
     <div id="stage">
       <canvas id="field" height="420"></canvas>
       <div id="comboText"></div>
       <div id="judgeText"></div>
+      <div id="phaseText"></div>
     </div>
 
     <div class="keys k4" id="keys"></div>
@@ -226,6 +235,36 @@
       <div><label>Cap %</label><input type="number" id="eMax" value="100" min="1" max="100" step="1"></div>
       <div><label>Idle decay %/s</label><input type="number" id="eDecay" value="0" min="0" max="20" step="0.5"></div>
     </div>
+
+    <div class="fieldset-title">Round length &amp; outcome</div>
+    <div class="grid3">
+      <div><label>Min length (min)</label><input type="number" id="rMin" value="3" min="0.2" max="60" step="0.5"></div>
+      <div><label>Max length (min)</label><input type="number" id="rMax" value="5" min="0.2" max="60" step="0.5"></div>
+      <div><label>Pass mark %</label><input type="number" id="rPass" value="60" min="0" max="100" step="1"></div>
+    </div>
+    <div class="grid3" style="margin-top:9px;">
+      <div><label>Result hold (s)</label><input type="number" id="rHold" value="3" min="0" max="30" step="0.5"></div>
+      <div><label>Fail: length (s)</label><input type="number" id="rFailSec" value="10" min="0" max="120" step="1"></div>
+      <div><label>Fail: intensity %</label><input type="number" id="rFailPct" value="50" min="0" max="100" step="1"></div>
+    </div>
+    <div class="grid3" style="margin-top:9px;">
+      <div><label>Clear: length (s)</label><input type="number" id="rWinSec" value="10" min="0" max="120" step="1"></div>
+      <div><label>Clear: intensity %</label><input type="number" id="rWinPct" value="20" min="0" max="100" step="1"></div>
+      <div><label>&nbsp;</label><div class="switch"><input type="checkbox" id="rEndless"><span>Endless (no round end)</span></div></div>
+    </div>
+    <p class="hint">Metronome rounds run for a random length between Min and Max. With an audio file the round is
+      the length of the track. At the end the toys stop, the accuracy is shown for <b>Result hold</b>, then the
+      reward or punishment plays with a randomly picked pattern per device.</p>
+
+    <div class="fieldset-title">Rage lock (long miss streak)</div>
+    <div class="grid3">
+      <div><label>Misses to lock</label><input type="number" id="lockAfter" value="20" min="2" max="200" step="1"></div>
+      <div><label>Lock intensity %</label><input type="number" id="lockPct" value="80" min="0" max="100" step="1"></div>
+      <div><label>Hits to release</label><input type="number" id="lockRelease" value="3" min="1" max="50" step="1"></div>
+    </div>
+    <p class="hint">While locked, every other intensity rule is ignored and the toys hold a steady
+      <b>Lock intensity</b>. It clears after that many consecutive Good/Perfect hits, and the energy bar
+      restarts from <b>Start %</b>.</p>
 
     <div class="fieldset-title">Punishment (on miss / wrong key)</div>
     <div class="grid3">
@@ -897,6 +936,15 @@ function blip(when, freq, dur, gain){
   g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
   o.connect(g).connect(audioCtx.destination);
   o.start(when); o.stop(when + dur + 0.02);
+  if (when > audioCtx.currentTime + 0.05){
+    G.scheduled.push(o);
+    o.onended = function(){ var i = G.scheduled.indexOf(o); if (i >= 0) G.scheduled.splice(i,1); };
+  }
+  return o;
+}
+function silenceScheduled(){
+  G.scheduled.forEach(function(o){ try { o.stop(); } catch(e){} });
+  G.scheduled = [];
 }
 
 /* --- background keep-alive (silent media stream + audio-thread ticker) --- */
@@ -1013,6 +1061,11 @@ var G = {
   combo:0, maxCombo:0,
   perfect:0, good:0, miss:0,
   punishUntil:0,        // ms epoch
+  phase:'idle',         // idle | play | result | outro | done
+  endAt:0,              // song time when the round ends (0 = endless)
+  resultAt:0, outroUntil:0, outroPct:0, failed:false, finalAcc:0,
+  missStreak:0, hitStreak:0, locked:false,
+  scheduled:[],         // metronome click nodes, so a round end can silence them
   lastEnergyAt:0,
   srcNode:null,
   buffer:null,
@@ -1028,7 +1081,7 @@ function songTime(){
 function beatDur(){ return 60 / clamp(num($('bpm'),100), 40, 220); }
 
 function generateAhead(){
-  if ($('source').value !== 'click') return;
+  if ($('source').value !== 'click' || G.phase !== 'play') return;
   var bd = beatDur();
   var horizon = songTime() + 4.0;
   var diff = $('difficulty').value;
@@ -1146,13 +1199,30 @@ function addEnergy(d){
   G.energy = clamp(G.energy + d, lo, hi);
 }
 
+function registerHit(){
+  G.missStreak = 0;
+  if (G.locked){
+    G.hitStreak++;
+    if (G.hitStreak >= Math.max(1, num($('lockRelease'),3))){
+      G.locked = false; G.hitStreak = 0;
+      G.energy = clamp(num($('eStart'),20), num($('eMin'),0), num($('eMax'),100));
+      G.punishUntil = 0;
+      Object.keys(devs).forEach(function(k){ devs[k].lastSent = null; });
+      showJudge('RELEASED', '#3ddc97');
+      log('Rage lock released — energy restarts at ' + Math.round(G.energy) + '%.');
+    }
+  }
+}
+
 function onPerfect(n){
+  registerHit();
   G.perfect++; G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo);
   addEnergy(num($('ePerfect'),3));
   showJudge('PERFECT', '#3ddc97');
   if ($('hitSound').checked && audioCtx) blip(audioCtx.currentTime, 1600, 0.04, 0.12);
 }
 function onGood(n){
+  registerHit();
   G.good++; G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo);
   addEnergy(num($('eGood'),1.5));
   showJudge('GOOD', '#ffb03a');
@@ -1160,7 +1230,14 @@ function onGood(n){
 }
 function onMiss(reason){
   G.miss++; G.combo = 0;
-  G.punishUntil = Date.now() + clamp(num($('pSec'),0.5), 0.1, 5) * 1000;
+  G.missStreak++; G.hitStreak = 0;
+  if (!G.locked && G.missStreak >= Math.max(2, num($('lockAfter'),20))){
+    G.locked = true;
+    log('Rage lock ON after ' + G.missStreak + ' misses — steady ' + num($('lockPct'),80) + '% until ' +
+        num($('lockRelease'),3) + ' clean hits.');
+    showJudge('LOCKED', '#ff5470');
+  }
+  if (!G.locked) G.punishUntil = Date.now() + clamp(num($('pSec'),0.5), 0.1, 5) * 1000;
   addEnergy(-Math.abs(num($('eMiss'),15)));
   showJudge(reason === 'stray' ? 'WRONG' : 'MISS', '#ff5470');
   Object.keys(devs).forEach(function(k){ devs[k].lastSent = null; });
@@ -1168,7 +1245,7 @@ function onMiss(reason){
 }
 
 function press(lane){
-  if (!G.running) return;
+  if (!G.running || G.phase !== 'play') return;
   flashKey(lane);
   var t = songTime();
   var wP = num($('wPerfect'),70)/1000, wG = num($('wGood'),140)/1000;
@@ -1190,6 +1267,7 @@ function press(lane){
 }
 
 function sweepMisses(){
+  if (G.phase !== 'play') return;
   var t = songTime();
   var wG = num($('wGood'),140)/1000;
   while (G.cursor < G.notes.length){
@@ -1256,7 +1334,7 @@ function tick(){
   }
   G.lastEnergyAt = now;
 
-  var punishing = now < G.punishUntil;
+  var punishing = now < G.punishUntil && !G.locked && G.phase === 'play';
   var punishPct = clamp(num($('pPct'),70), 0, 100);
   var punishStutter = $('pStyle').value === 'stutter';
 
@@ -1266,6 +1344,31 @@ function tick(){
     var scale = num(st.ui.scale, 100) / 100;
     var maxP = num($('eMax'), 100);
     var out;
+
+    if (G.phase === 'result'){
+      sendIntensity(st, 0);
+      st.ui.bar.style.width = '0%';
+      st.ui.now.textContent = '0%';
+      st.ui.pat.textContent = 'Result';
+      return;
+    }
+    if (G.phase === 'outro'){
+      var ot = (now - st.patternStart) / 1000;
+      out = clamp(st.pattern.calc(ot, G.outroPct) * scale, 0, 100);
+      sendIntensity(st, out);
+      st.ui.bar.style.width = clamp(out,0,100) + '%';
+      st.ui.now.textContent = Math.round(out) + '%';
+      st.ui.pat.textContent = (G.failed ? 'Punish · ' : 'Reward · ') + st.pattern.name;
+      return;
+    }
+    if (G.locked){
+      out = clamp(num($('lockPct'),80) * scale, 0, 100);
+      sendIntensity(st, out);
+      st.ui.bar.style.width = clamp(out,0,100) + '%';
+      st.ui.now.textContent = Math.round(out) + '%';
+      st.ui.pat.textContent = 'LOCKED';
+      return;
+    }
 
     if (punishing){
       var p = punishPct;
@@ -1283,6 +1386,82 @@ function tick(){
     st.ui.bar.style.width = clamp(out,0,100) + '%';
     st.ui.now.textContent = Math.round(out) + '%';
   });
+}
+
+/* ================= round phases ================= */
+var phaseEl = $('phaseText');
+function setPhaseText(html){
+  if (!html){ phaseEl.style.display = 'none'; phaseEl.innerHTML = ''; return; }
+  phaseEl.innerHTML = html;
+  phaseEl.style.display = 'block';
+}
+function accuracyPct(){
+  var tot = G.perfect + G.good + G.miss;
+  return tot ? (G.perfect + G.good*0.5) / tot * 100 : 0;
+}
+
+function endRound(){
+  if (G.phase !== 'play') return;
+  silenceScheduled();
+  if (G.srcNode){ try { G.srcNode.stop(); } catch(e){} G.srcNode = null; }
+  G.finalAcc = accuracyPct();
+  G.failed = G.finalAcc < num($('rPass'), 60);
+  G.locked = false;
+  G.punishUntil = 0;
+  G.phase = 'result';
+  G.resultAt = Date.now();
+  Object.keys(devs).forEach(function(k){ devs[k].lastSent = null; });
+  setPhaseText(
+    '<div class="big" style="color:' + (G.failed ? '#ff5470' : '#3ddc97') + '">' +
+      G.finalAcc.toFixed(1) + '%</div>' +
+    '<div class="mid">' + (G.failed ? 'CHALLENGE FAILED' : 'CHALLENGE CLEARED') + '</div>' +
+    '<div class="small">Perfect ' + G.perfect + ' · Good ' + G.good + ' · Miss ' + G.miss +
+      ' · max combo ' + G.maxCombo + '</div>');
+  log('Round over — accuracy ' + G.finalAcc.toFixed(1) + '% (' +
+      (G.failed ? 'FAILED' : 'CLEARED') + '), toys idle for ' + num($('rHold'),3) + 's.');
+}
+
+function beginOutro(){
+  var sec = G.failed ? num($('rFailSec'),10) : num($('rWinSec'),10);
+  G.outroPct = clamp(G.failed ? num($('rFailPct'),50) : num($('rWinPct'),20), 0, 100);
+  if (sec <= 0){ finishRound(); return; }
+  G.phase = 'outro';
+  G.outroUntil = Date.now() + sec*1000;
+  var now = Date.now();
+  Object.keys(devs).forEach(function(k){
+    var st = devs[k];
+    st.lastSent = null;
+    if (!st.running) return;
+    st.pattern = pick(enabledPatterns(st));
+    st.patternStart = now;
+    st.patternChangeAt = now + 1e9;          // frozen for the whole outro
+    if (st.def.motion === 'thrust' && st.ui.depthRandom && st.ui.depthRandom.checked){
+      var lo = num(st.ui.depthMin,0), hi = num(st.ui.depthMax,20);
+      if (hi < lo){ var t2 = lo; lo = hi; hi = t2; }
+      var span = Math.max(1, Math.round((hi-lo)*0.25));
+      st.depthA = randInt(lo, Math.max(lo, hi-span));
+      st.depthB = randInt(Math.min(hi, st.depthA+span), hi);
+      var dtpl = currentDepthTemplate(st);
+      if (dtpl) sendRaw(st, dtpl.replace('{a}', st.depthA).replace('{b}', st.depthB).replace('{v}', 0));
+    }
+  });
+  setPhaseText(
+    '<div class="big" style="color:' + (G.failed ? '#ff5470' : '#3ddc97') + '">' +
+      (G.failed ? 'PUNISHMENT' : 'REWARD') + '</div>' +
+    '<div class="mid">' + sec + 's · ' + G.outroPct + '% · random pattern</div>' +
+    '<div class="small">Accuracy ' + G.finalAcc.toFixed(1) + '%</div>');
+  log((G.failed ? 'Punishment' : 'Reward') + ': ' + sec + 's at ' + G.outroPct + '%, random pattern per device.');
+}
+
+function finishRound(){
+  G.phase = 'done';
+  var acc = G.finalAcc;
+  var failed = G.failed;
+  stopGame();
+  setPhaseText(
+    '<div class="big" style="color:' + (failed ? '#ff5470' : '#3ddc97') + '">' + acc.toFixed(1) + '%</div>' +
+    '<div class="mid">' + (failed ? 'CHALLENGE FAILED' : 'CHALLENGE CLEARED') + '</div>' +
+    '<div class="small">Press Start Game for another round</div>');
 }
 
 /* ================= render loop ================= */
@@ -1315,7 +1494,7 @@ function draw(){
   cx.fillStyle = 'rgba(255,255,255,0.22)';
   cx.fillRect(0, judgeY, W, 2);
 
-  if (G.running){
+  if (G.running && G.phase === 'play'){
     var t = songTime();
     var app = clamp(num($('source').value === 'file' ? $('approach2') : $('approach'), 1.6), 0.6, 4);
     for (var j=Math.max(0,G.cursor-4); j<G.notes.length; j++){
@@ -1405,6 +1584,11 @@ function startGame(){
   G.energy = clamp(num($('eStart'),20), num($('eMin'),0), num($('eMax'),100));
   G.combo = 0; G.maxCombo = 0; G.perfect = 0; G.good = 0; G.miss = 0;
   G.punishUntil = 0; G.lastEnergyAt = Date.now();
+  G.missStreak = 0; G.hitStreak = 0; G.locked = false;
+  G.failed = false; G.finalAcc = 0; G.resultAt = 0; G.outroUntil = 0;
+  G.scheduled = [];
+  G.phase = 'play';
+  setPhaseText('');
 
   var lead = 2.0;
   G.t0 = ac.currentTime + lead;
@@ -1424,9 +1608,14 @@ function startGame(){
     G.srcNode.buffer = G.buffer;
     G.srcNode.connect(ac.destination);
     G.srcNode.start(G.t0);
-    log('Playing ' + loadedFileName + ' — ' + G.notes.length + ' notes.');
+    G.endAt = $('rEndless').checked ? 0 : G.buffer.duration;
+    log('Playing ' + loadedFileName + ' — ' + G.notes.length + ' notes, round = full track.');
   } else {
-    log('Metronome chart at ' + num($('bpm'),100) + ' BPM (' + $('difficulty').value + ').');
+    var lo = num($('rMin'),3), hi = num($('rMax'),5);
+    if (hi < lo){ var sw = lo; lo = hi; hi = sw; }
+    G.endAt = $('rEndless').checked ? 0 : rand(lo, hi) * 60;
+    log('Metronome chart at ' + num($('bpm'),100) + ' BPM (' + $('difficulty').value + '), round length ' +
+        (G.endAt ? (Math.floor(G.endAt/60) + ':' + pad2(Math.round(G.endAt%60))) : 'endless') + ' (hidden until it ends).');
   }
 
   G.running = true;
@@ -1445,6 +1634,12 @@ function startGame(){
 
 function stopGame(){
   G.running = false;
+  silenceScheduled();
+  if (G.phase === 'play' || G.phase === 'result' || G.phase === 'outro'){
+    if (G.phase !== 'done') setPhaseText('');
+    G.phase = 'idle';
+  }
+  G.locked = false; G.punishUntil = 0;
   if (G.srcNode){ try { G.srcNode.stop(); } catch(e){} G.srcNode = null; }
   Object.keys(devs).forEach(function(k){ stopDevice(devs[k]); });
   if (tickTimer){ clearInterval(tickTimer); tickTimer = null; }
@@ -1465,17 +1660,31 @@ function panic(){
 
 /* ================= ui refresh ================= */
 function updateUi(){
-  if (G.running){
+  if (G.running && G.phase === 'play'){
     generateAhead();
     sweepMisses();
+    if (G.endAt && songTime() >= G.endAt) endRound();
   }
+  if (G.phase === 'result' && Date.now() >= G.resultAt + num($('rHold'),3)*1000) beginOutro();
+  if (G.phase === 'outro' && Date.now() >= G.outroUntil) finishRound();
+
+  var tl = '—';
+  if (G.phase === 'play') tl = G.endAt ? (function(){
+        var r = Math.max(0, G.endAt - songTime());
+        return pad2(Math.floor(r/60)) + ':' + pad2(Math.floor(r%60));
+      })() : '∞';
+  else if (G.phase === 'result') tl = 'RESULT';
+  else if (G.phase === 'outro')  tl = (G.failed ? 'PUNISH ' : 'REWARD ') + Math.ceil((G.outroUntil-Date.now())/1000) + 's';
+  $('sTime').textContent = tl;
   $('sEnergy').textContent = Math.round(G.energy) + '%';
   $('sCombo').textContent = G.combo;
   var tot = G.perfect + G.good + G.miss;
   $('sAcc').textContent = tot ? (Math.round((G.perfect + G.good*0.5) / tot * 100) + '%') : '—';
   $('energyFill').style.width = clamp(G.energy,0,100) + '%';
   $('energyBar').className = 'energy' + (Date.now() < G.punishUntil ? ' punish' : '');
-  comboEl.textContent = G.combo > 2 ? (G.combo + ' combo') : '';
+  comboEl.textContent = G.locked ? ('LOCKED — ' + G.hitStreak + '/' + num($('lockRelease'),3) + ' clean hits')
+                                 : (G.combo > 2 ? (G.combo + ' combo') : '');
+  comboEl.style.color = G.locked ? '#ff5470' : '';
   updateMediaMetadata();
   refreshToyCount();
 }
