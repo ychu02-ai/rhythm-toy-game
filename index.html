@@ -146,7 +146,7 @@
 <div class="wrap">
 
   <h1>Rhythm Toy Game</h1>
-  <p class="sub">Hit the beat &mdash; the energy bar drives the toys. Direct Web Bluetooth: Lovense &middot; Satisfyer</p>
+  <p class="sub">Hit the beat &mdash; the energy bar drives the toys. Direct Web Bluetooth: Lovense &middot; Satisfyer (Signet Ring, Epic Duo, &hellip;)</p>
 
   <!-- ============ PLAY ============ -->
   <section>
@@ -231,7 +231,7 @@
       <div><label>Miss &minus;%</label><input type="number" id="eMiss" value="15" min="0" max="100" step="1"></div>
     </div>
     <div class="grid3" style="margin-top:9px;">
-      <div><label>Floor %</label><input type="number" id="eMin" value="0" min="0" max="100" step="1"></div>
+      <div><label>Floor %</label><input type="number" id="eMin" value="20" min="0" max="100" step="1"></div>
       <div><label>Cap %</label><input type="number" id="eMax" value="100" min="1" max="100" step="1"></div>
       <div><label>Idle decay %/s</label><input type="number" id="eDecay" value="0" min="0" max="20" step="0.5"></div>
     </div>
@@ -259,16 +259,16 @@
     <div class="fieldset-title">Rage lock (long miss streak)</div>
     <div class="grid3">
       <div><label>Misses to lock</label><input type="number" id="lockAfter" value="20" min="2" max="200" step="1"></div>
-      <div><label>Lock intensity %</label><input type="number" id="lockPct" value="80" min="0" max="100" step="1"></div>
+      <div><label>Lock intensity %</label><input type="number" id="lockPct" value="60" min="0" max="100" step="1"></div>
       <div><label>Hits to release</label><input type="number" id="lockRelease" value="3" min="1" max="50" step="1"></div>
     </div>
     <p class="hint">While locked, every other intensity rule is ignored and the toys hold a steady
-      <b>Lock intensity</b>. It clears after that many consecutive Good/Perfect hits, and the energy bar
-      restarts from <b>Start %</b>.</p>
+      <b>Lock intensity</b> (default 60%). It clears after that many consecutive Good/Perfect hits, and the
+      energy bar restarts from <b>Start %</b>.</p>
 
     <div class="fieldset-title">Punishment (on miss / wrong key)</div>
     <div class="grid3">
-      <div><label>Punish %</label><input type="number" id="pPct" value="70" min="0" max="100" step="1"></div>
+      <div><label>Punish %</label><input type="number" id="pPct" value="50" min="0" max="100" step="1"></div>
       <div><label>Length (s)</label><input type="number" id="pSec" value="0.5" min="0.1" max="5" step="0.1"></div>
       <div>
         <label>Style</label>
@@ -283,8 +283,8 @@
 
     <div class="fieldset-title">Judging</div>
     <div class="grid3">
-      <div><label>Perfect &plusmn;ms</label><input type="number" id="wPerfect" value="70" min="20" max="200" step="5"></div>
-      <div><label>Good &plusmn;ms</label><input type="number" id="wGood" value="140" min="40" max="400" step="5"></div>
+      <div><label>Perfect &plusmn;ms</label><input type="number" id="wPerfect" value="100" min="20" max="200" step="5"></div>
+      <div><label>Good &plusmn;ms</label><input type="number" id="wGood" value="200" min="40" max="400" step="5"></div>
       <div><label>Audio offset (ms)</label><input type="number" id="offset" value="0" min="-300" max="300" step="5"></div>
     </div>
     <div class="switch" style="margin-top:9px;">
@@ -321,6 +321,7 @@
       <button class="b-ghost" id="bpScan" disabled>Scan 8s</button>
       <button class="b-ghost" id="bpDisconnect" disabled>Disconnect</button>
     </div>
+    <div id="bpList" class="hint" style="margin-top:9px;"></div>
     <p class="hint" id="bpStatus">
       Direct Web Bluetooth is the default and needs nothing here. To test through Intiface instead:
       start Intiface Central (Engine running, <b>Listen on all network interfaces</b> + <b>Bluetooth LE</b> on),
@@ -441,7 +442,7 @@ var DEFS = [
     depthDefault:'DepthRange:{a}:{b};', depthMax:20
   },
   {
-    id:'signet', name:'Satisfyer Signet Ring', type:'Vibration', brand:'satisfyer', motion:'vibrate',
+    id:'satisfyer', name:'Satisfyer', type:'Vibration', brand:'satisfyer', motion:'vibrate',
     scale:100, valueMax:100
   }
 ];
@@ -489,6 +490,9 @@ function writeCh(ch, buf){
     return ch.writeValueWithoutResponse(buf).catch(function(){ return ch.writeValue(buf); });
   }
   return ch.writeValue(buf);
+}
+function setDeviceTitle(st, name){
+  if (st.ui.title) st.ui.title.textContent = name ? (st.def.name + ' — ' + name) : st.def.name;
 }
 function setStatus(st, text, cls){
   st.ui.badge.textContent = text;
@@ -560,14 +564,40 @@ function connectSatisfyer(st){
     st.server = server;
     return delay(600);
   }).then(function(){
-    return st.server.getPrimaryService(SF_SVC_LIVE);
+    return st.server.getPrimaryService(SF_SVC_LIVE).catch(function(){
+      // Signet Ring / other models may expose a different live-control service — enumerate and pick one
+      log(st.def.name + ': ' + SF_SVC_LIVE.slice(0,8) + ' not found, enumerating services…');
+      return st.server.getPrimaryServices().then(function(svcs){
+        log(st.def.name + ': services = ' + svcs.map(function(x){ return x.uuid.slice(0,8); }).join(', '));
+        var cand = svcs.filter(function(x){ return /^5136/.test(x.uuid); });
+        if (!cand.length) throw new Error('no Satisfyer live-control service (5136xxxx) on this device');
+        log(st.def.name + ': using ' + cand[0].uuid.slice(0,8));
+        return cand[0];
+      });
+    });
   }).then(function(svc){
-    return Promise.all([ svc.getCharacteristic(SF_CH_MODE), svc.getCharacteristic(SF_CH_VALUE) ]);
+    return svc.getCharacteristics().then(function(chs){
+      var writable = chs.filter(function(c){ return c.properties.write || c.properties.writeWithoutResponse; });
+      log(st.def.name + ': characteristics = ' + chs.map(function(c){ return c.uuid.slice(0,8); }).join(', '));
+      var mode = null, val = null;
+      chs.forEach(function(c){
+        var tag = c.uuid.slice(4,8);              // e.g. '1501' / '1502'
+        if (/01$/.test(tag) && !mode) mode = c;
+        if (/02$/.test(tag) && !val)  val  = c;
+      });
+      if (!mode || !val){                          // fall back to declaration order
+        mode = mode || writable[0];
+        val  = val  || writable[1] || writable[0];
+      }
+      if (!mode || !val) throw new Error('no writable mode/value characteristics found');
+      return [mode, val];
+    });
   }).then(function(chs){
     st.sfMode = chs[0]; st.sfValue = chs[1];
     st.sfStarted = false;
     st.connected = true;
-    log(st.def.name + ': live-control service ready (mode ...1501 / value ...1502, big-endian)');
+    log(st.def.name + ': live control ready — mode ' + st.sfMode.uuid.slice(0,8) +
+        ' / value ' + st.sfValue.uuid.slice(0,8) + ' (4 bytes big-endian)');
     return delay(200);
   });
 }
@@ -584,6 +614,7 @@ function connect(st){
   p.then(function(){
     st.connecting = false;
     setStatus(st, 'Connected', 'on');
+    setDeviceTitle(st, (st.bt && st.bt.name) ? st.bt.name : '(unnamed BLE device)');
     st.ui.connectBtn.textContent = 'Reconnect';
     st.ui.connectBtn.disabled = false;
     st.ui.disconnectBtn.disabled = false;
@@ -608,6 +639,7 @@ function onDisconnected(st){
   st.sfMode = null; st.sfValue = null; st.sfStarted = false; st.lastSent = null;
   st.running = false;
   setStatus(st, 'Disconnected');
+  setDeviceTitle(st, null);
   st.ui.disconnectBtn.disabled = true;
   st.ui.connectBtn.disabled = false;
   log(st.def.name + ': disconnected');
@@ -793,7 +825,18 @@ function bpOutputs(d){
   return out;
 }
 
+function renderBpList(){
+  var el = $('bpList');
+  if (!BPX.connected){ el.textContent = ''; return; }
+  if (!BPX.devices.length){ el.textContent = 'Connected to the server, no toys found yet — press Scan with the toys powered on.'; return; }
+  el.innerHTML = 'Devices on the server:<br>' + BPX.devices.map(function(d, i){
+    var outs = bpOutputs(d).map(function(o){ return o.type + '#' + o.index; }).join(', ');
+    return '&nbsp;&nbsp;<b>' + i + ': ' + d.name + '</b> — ' + outs;
+  }).join('<br>');
+}
+
 function refreshBpSelects(){
+  renderBpList();
   Object.keys(devs).forEach(function(k){
     var st = devs[k];
     if (!st.ui.bpSel) return;
@@ -846,8 +889,19 @@ function bindBp(st){
     log(st.def.name + ': Intiface output → ' + o.type + ' #' + o.index);
   };
 
+  try {
+    log('Intiface dump [' + d.name + ']: methods = ' +
+        Object.getOwnPropertyNames(Object.getPrototypeOf(d)).join(','));
+    log('Intiface dump [' + d.name + ']: features = ' + JSON.stringify([].concat(
+      (d.features && typeof d.features.forEach === 'function')
+        ? (function(){ var a=[]; d.features.forEach(function(f,k){ a.push([k,f]); }); return a; })()
+        : []
+    )).slice(0, 600));
+  } catch(e){}
+
   st.connected = true;
   setStatus(st, 'Connected', 'on');
+  setDeviceTitle(st, d.name + ' (Intiface)');
   st.ui.connectBtn.textContent = 'Rebind';
   st.ui.disconnectBtn.disabled = false;
   log(st.def.name + ': bound to Intiface device "' + d.name + '" — ' + outs.length +
@@ -861,9 +915,9 @@ function bpRun(st, v){
   var BP = bpLib(), d = st.bpDevice;
   var kind = st.bpKind || 'Vibrate', idx = st.bpFeature || 0;
   var attempts = [
-    function(){ return d.runOutput(idx, BP.DeviceOutput[kind].percent(v)); },
-    function(){ return d.runOutput(BP.DeviceOutput[kind].percent(v)); },
-    function(){ return d.vibrate({ index: idx, scalar: v }); },
+    function(){ return d.runOutput(BP.DeviceOutput[kind].percent(v)); },              // v5: one argument, 0..1
+    function(){ return d.runOutput(idx, BP.DeviceOutput[kind].percent(v)); },         // v4 variant with feature index
+    function(){ return d.vibrate({ index: idx, scalar: v }); },                       // v3
     function(){ return d.vibrate(v); }
   ];
   function step(i){
@@ -1195,7 +1249,7 @@ function showJudge(text, color){
 }
 
 function addEnergy(d){
-  var lo = num($('eMin'),0), hi = num($('eMax'),100);
+  var lo = num($('eMin'),20), hi = num($('eMax'),100);
   G.energy = clamp(G.energy + d, lo, hi);
 }
 
@@ -1205,7 +1259,7 @@ function registerHit(){
     G.hitStreak++;
     if (G.hitStreak >= Math.max(1, num($('lockRelease'),3))){
       G.locked = false; G.hitStreak = 0;
-      G.energy = clamp(num($('eStart'),20), num($('eMin'),0), num($('eMax'),100));
+      G.energy = clamp(num($('eStart'),20), num($('eMin'),20), num($('eMax'),100));
       G.punishUntil = 0;
       Object.keys(devs).forEach(function(k){ devs[k].lastSent = null; });
       showJudge('RELEASED', '#3ddc97');
@@ -1233,7 +1287,7 @@ function onMiss(reason){
   G.missStreak++; G.hitStreak = 0;
   if (!G.locked && G.missStreak >= Math.max(2, num($('lockAfter'),20))){
     G.locked = true;
-    log('Rage lock ON after ' + G.missStreak + ' misses — steady ' + num($('lockPct'),80) + '% until ' +
+    log('Rage lock ON after ' + G.missStreak + ' misses — steady ' + num($('lockPct'),60) + '% until ' +
         num($('lockRelease'),3) + ' clean hits.');
     showJudge('LOCKED', '#ff5470');
   }
@@ -1248,7 +1302,7 @@ function press(lane){
   if (!G.running || G.phase !== 'play') return;
   flashKey(lane);
   var t = songTime();
-  var wP = num($('wPerfect'),70)/1000, wG = num($('wGood'),140)/1000;
+  var wP = num($('wPerfect'),100)/1000, wG = num($('wGood'),200)/1000;
   var best = null, bestDt = 1e9;
   for (var i=G.cursor; i<G.notes.length; i++){
     var n = G.notes[i];
@@ -1269,7 +1323,7 @@ function press(lane){
 function sweepMisses(){
   if (G.phase !== 'play') return;
   var t = songTime();
-  var wG = num($('wGood'),140)/1000;
+  var wG = num($('wGood'),200)/1000;
   while (G.cursor < G.notes.length){
     var n = G.notes[G.cursor];
     if (n.state === 'live' && n.t + wG < t){ n.state = 'miss'; onMiss('late'); G.cursor++; continue; }
@@ -1335,7 +1389,7 @@ function tick(){
   G.lastEnergyAt = now;
 
   var punishing = now < G.punishUntil && !G.locked && G.phase === 'play';
-  var punishPct = clamp(num($('pPct'),70), 0, 100);
+  var punishPct = clamp(num($('pPct'),50), 0, 100);
   var punishStutter = $('pStyle').value === 'stutter';
 
   Object.keys(devs).forEach(function(k){
@@ -1362,7 +1416,7 @@ function tick(){
       return;
     }
     if (G.locked){
-      out = clamp(num($('lockPct'),80) * scale, 0, 100);
+      out = clamp(num($('lockPct'),60) * scale, 0, 100);
       sendIntensity(st, out);
       st.ui.bar.style.width = clamp(out,0,100) + '%';
       st.ui.now.textContent = Math.round(out) + '%';
@@ -1581,7 +1635,7 @@ function startGame(){
   }
 
   G.notes = []; G.cursor = 0; G.genBeat = 0;
-  G.energy = clamp(num($('eStart'),20), num($('eMin'),0), num($('eMax'),100));
+  G.energy = clamp(num($('eStart'),20), num($('eMin'),20), num($('eMax'),100));
   G.combo = 0; G.maxCombo = 0; G.perfect = 0; G.good = 0; G.miss = 0;
   G.punishUntil = 0; G.lastEnergyAt = Date.now();
   G.missStreak = 0; G.hitStreak = 0; G.locked = false;
@@ -1733,11 +1787,12 @@ function buildDevice(def){
     '<div class="btn-row">' +
       '<button class="b-primary" data-r="connectBtn">Connect</button>' +
       '<button class="b-ghost" data-r="disconnectBtn" disabled>Disconnect</button>' +
+      '<button class="b-ghost" data-r="testBtn">Test 50%</button>' +
     '</div>' +
 
     (def.brand === 'satisfyer'
       ? '<div class="switch" style="margin-top:9px;">' +
-          '<input type="checkbox" data-r="sfScanAll"><span>Scan all BLE devices (use if "SF Signet Ring" is not listed — the name may not be advertised)</span>' +
+          '<input type="checkbox" checked data-r="sfScanAll"><span>Scan all BLE devices — Satisfyer toys do not advertise a name, so this is normally required. Pick the strongest signal.</span>' +
         '</div>'
       : '') +
 
@@ -1809,6 +1864,7 @@ function buildDevice(def){
 
   sec.querySelectorAll('[data-r]').forEach(function(el){ st.ui[el.getAttribute('data-r')] = el; });
   st.ui.badge = sec.querySelector('.badge');
+  st.ui.title = sec.querySelector('.title .n');
 
   st.ui.patBoxes = [];
   PATTERNS.forEach(function(p){
@@ -1869,6 +1925,13 @@ function buildDevice(def){
     if (!st.enabled && st.running) stopDevice(st);
     if (st.enabled && G.running && st.connected) startDevice(st);
     refreshToyCount();
+  });
+  st.ui.testBtn.addEventListener('click', function(){
+    if (!st.connected){ log(st.def.name + ': not connected — nothing to test.'); return; }
+    log(st.def.name + ': test pulse 50% for 2s (' + (st.transport === 'bp' ? 'Intiface' : 'direct BLE') + ')');
+    st.lastSent = null;
+    sendIntensity(st, 50);
+    setTimeout(function(){ st.lastSent = null; hardStop(st); }, 2000);
   });
   st.ui.connectBtn.addEventListener('click', function(){ connect(st); });
   st.ui.disconnectBtn.addEventListener('click', function(){ disconnect(st); });
