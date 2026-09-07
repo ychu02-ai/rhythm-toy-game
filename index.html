@@ -321,6 +321,19 @@
       <button class="b-ghost" id="bpScan" disabled>Scan 8s</button>
       <button class="b-ghost" id="bpDisconnect" disabled>Disconnect</button>
     </div>
+    <div class="grid2" style="margin-top:9px;">
+      <div>
+        <label>Value scale sent to buttplug</label>
+        <select id="bpScale">
+          <option value="1" selected>0.0 – 1.0 (v5 percent)</option>
+          <option value="100">0 – 100</option>
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div class="switch"><input type="checkbox" id="bpVerbose"><span>Log every value sent</span></div>
+      </div>
+    </div>
     <div id="bpList" class="hint" style="margin-top:9px;"></div>
     <p class="hint" id="bpStatus">
       Direct Web Bluetooth is the default and needs nothing here. To test through Intiface instead:
@@ -432,12 +445,18 @@ var SF_GENERIC = [
   '0000fff0-0000-1000-8000-00805f9b34fb',
   '0000ffe0-0000-1000-8000-00805f9b34fb',
   '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-  'battery_service', 'device_information', 'generic_access'
+  'battery_service', 'device_information'
+  // NOTE: never add 'generic_access' / 'generic_attribute' here — they are on the Web Bluetooth
+  // blocklist and make requestDevice() throw SecurityError before the chooser even opens.
 ];
+var SF_BLOCKED = ['generic_access','generic_attribute','00001800','00001801'];
 function sfOptionalServices(extraText){
-  var extra = (extraText || '').split(/[\s,;]+/).filter(function(x){ return /^[0-9a-fA-F-]{4,}$/.test(x); })
+  var extra = (extraText || '').split(/[\s,;]+/)
+                .filter(function(x){ return /^[0-9a-fA-F-]{4,}$/.test(x); })
                 .map(function(x){ return x.toLowerCase(); });
-  return SF_FAMILY.concat(SF_GENERIC).concat(extra);
+  return SF_FAMILY.concat(SF_GENERIC).concat(extra).filter(function(u){
+    return SF_BLOCKED.every(function(b){ return String(u).indexOf(b) !== 0; });
+  });
 }
 var SF_MODE_START = 0x01, SF_MODE_PAUSE = 0x03, SF_MODE_STOP = 0x07;
 
@@ -928,6 +947,15 @@ function bindBp(st){
   };
 
   try {
+    var BPl = bpLib();
+    log('Intiface lib: DeviceOutput=' + (BPl && BPl.DeviceOutput ? Object.keys(BPl.DeviceOutput).join('/') : 'MISSING') +
+        ' · OutputType=' + (BPl && BPl.OutputType ? 'yes' : 'no'));
+    if (BPl && BPl.OutputType && typeof d.hasOutput === 'function'){
+      var have = Object.keys(BPl.OutputType).filter(function(k){
+        try { return d.hasOutput(BPl.OutputType[k]); } catch(e){ return false; }
+      });
+      log('Intiface hasOutput → ' + (have.join(', ') || '(none)'));
+    }
     log('Intiface dump [' + d.name + ']: methods = ' +
         Object.getOwnPropertyNames(Object.getPrototypeOf(d)).join(','));
     log('Intiface dump [' + d.name + ']: features = ' + JSON.stringify([].concat(
@@ -949,20 +977,36 @@ function bindBp(st){
 }
 
 /* try the v5 → v4 → v3 call shapes in order, remember the one that worked */
+var BP_API_NAMES = ['runOutput(cmd)', 'runOutput(index, cmd)', 'vibrate({index,scalar})', 'vibrate(value)'];
+
 function bpRun(st, v){
   var BP = bpLib(), d = st.bpDevice;
   var kind = st.bpKind || 'Vibrate', idx = st.bpFeature || 0;
+  var scale = parseFloat(($('bpScale') || {}).value || '1') || 1;
+  var out = v * scale;                       // 0..1 by default, 0..100 if the build wants whole percent
   var attempts = [
-    function(){ return d.runOutput(BP.DeviceOutput[kind].percent(v)); },              // v5: one argument, 0..1
-    function(){ return d.runOutput(idx, BP.DeviceOutput[kind].percent(v)); },         // v4 variant with feature index
-    function(){ return d.vibrate({ index: idx, scalar: v }); },                       // v3
-    function(){ return d.vibrate(v); }
+    function(){ return d.runOutput(BP.DeviceOutput[kind].percent(out)); },        // v5: one argument
+    function(){ return d.runOutput(idx, BP.DeviceOutput[kind].percent(out)); },   // v4 variant with feature index
+    function(){ return d.vibrate({ index: idx, scalar: out }); },                 // v3
+    function(){ return d.vibrate(out); }
   ];
+  var errs = [];
   function step(i){
-    if (i >= attempts.length) return Promise.reject(new Error('no working output API on this device'));
+    if (i >= attempts.length){
+      return Promise.reject(new Error('no working output API — tried: ' + errs.join(' | ')));
+    }
     var r;
-    try { r = attempts[i](); } catch(e){ return step(i+1); }
-    return Promise.resolve(r).then(function(){ st.bpApi = i; }, function(){ return step(i+1); });
+    try { r = attempts[i](); }
+    catch(e){ errs.push(BP_API_NAMES[i] + ' threw ' + (e.message||e)); return step(i+1); }
+    return Promise.resolve(r).then(function(){
+      if (st.bpApi !== i || ($('bpVerbose') && $('bpVerbose').checked)){
+        log(st.def.name + ': Intiface ' + BP_API_NAMES[i] + ' → ' + kind + ' #' + idx + ' = ' + out);
+      }
+      st.bpApi = i;
+    }, function(e){
+      errs.push(BP_API_NAMES[i] + ' rejected: ' + (e && e.message ? e.message : e));
+      return step(i+1);
+    });
   }
   return step(st.bpApi || 0);
 }
